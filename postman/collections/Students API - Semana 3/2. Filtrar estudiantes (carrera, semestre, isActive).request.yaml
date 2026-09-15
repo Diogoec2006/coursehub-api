@@ -1,0 +1,8 @@
+$kind: http-request
+url: http://localhost:3000/students?career=Ingeniería de Sistemas&semester=4&isActive=true
+method: GET
+queryParams:
+  career: Ingeniería de Sistemas
+  semester: "4"
+  isActive: "true"
+order: 2000

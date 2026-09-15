@@ -1,0 +1,13 @@
+$kind: http-request
+url: http://localhost:3000/students/1
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "career": "Ingeniería de Software",
+      "semester": 5
+    }
+order: 9000

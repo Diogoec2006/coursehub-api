@@ -1,0 +1,5 @@
+$kind: http-request
+name: "11. Eliminar estudiante (400 Regla: No eliminar inactivo)"
+url: http://localhost:3000/students/2
+method: DELETE
+order: 11000

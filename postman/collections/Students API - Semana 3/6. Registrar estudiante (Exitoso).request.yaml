@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:3000/students
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Laura Gómez",
+      "email": "laura.gomez@example.com",
+      "age": 21,
+      "career": "Derecho",
+      "semester": 3,
+      "isActive": true
+    }
+order: 6000
