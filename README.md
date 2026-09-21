@@ -1,114 +1,355 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# CourseHub API 🚀
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST desarrollada con **NestJS**, **TypeScript** y **Node.js** para la gestión integral de cursos, estudiantes y matrículas (*Enrollments*).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🏗️ Arquitectura y Estructura del Proyecto
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+El proyecto está modularizado en tres módulos principales registrados en `AppModule`:
+- **`CoursesModule`**: Administración de cursos (creación, consulta, actualización y eliminación).
+- **`StudentsModule`**: Gestión de estudiantes con filtros, control de estado activo/inactivo y validaciones de unicidad de correo.
+- **`EnrollmentsModule`**: Administración de matrículas en memoria, relacionando estudiantes y cursos con validaciones de existencia, estado activo y unicidad de combinación `(studentId, courseId)`.
 
-## Project setup
-
-```bash
-$ npm install
+```
+src/
+├── app.controller.ts
+├── app.module.ts                   # Registra CoursesModule, StudentsModule y EnrollmentsModule
+├── app.service.ts
+├── main.ts                         # Configuración de ValidationPipe global
+├── welcome.controller.ts
+├── welcome.service.ts
+├── courses/
+│   ├── courses.controller.ts
+│   ├── courses.module.ts           # Exporta CoursesService
+│   ├── courses.service.ts
+│   └── dto/
+│       └── create-course.dto.ts
+├── students/
+│   ├── students.controller.ts
+│   ├── students.module.ts          # Exporta StudentsService
+│   ├── students.service.ts
+│   ├── dto/
+│   │   ├── create-student.dto.ts
+│   │   ├── get-students-filter.dto.ts
+│   │   ├── update-student-status.dto.ts
+│   │   └── update-student.dto.ts
+│   ├── entities/
+│   │   └── student.entity.ts
+│   └── pipes/
+│       └── parse-id.pipe.ts        # Pipe personalizado para validar enteros positivos (> 0)
+└── enrollments/
+    ├── enrollments.controller.ts   # Endpoints de matrículas
+    ├── enrollments.module.ts       # Importa StudentsModule y CoursesModule
+    ├── enrollments.service.ts      # Lógica de negocio y almacenamiento en memoria
+    ├── dto/
+    │   ├── create-enrollment.dto.ts
+    │   └── get-enrollments-filter.dto.ts
+    └── entities/
+        └── enrollment.entity.ts
 ```
 
-## Compile and run the project
+---
 
+## ⚙️ Instalación y Ejecución
+
+### 1. Instalar dependencias
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
-
+### 2. Iniciar la aplicación
 ```bash
-# unit tests
-$ npm run test
+# Modo desarrollo (watch)
+npm run start:dev
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# Compilar proyecto
+npm run build
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+### 3. Ejecutar Pruebas
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Pruebas unitarias
+npm run test
+
+# Pruebas e2e (End-to-End)
+npm run test:e2e
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Observability
+## 🛡️ Validaciones y Pipes
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+1. **`ValidationPipe` Global** (`main.ts`):
+   - `whitelist: true`: Elimina propiedades que no estén explícitamente definidas en los DTOs.
+   - `forbidNonWhitelisted: true`: Lanza un error HTTP `400 Bad Request` si la petición incluye propiedades no permitidas.
+   - `transform: true`: Convierte automáticamente los tipos según los decoradores `@Type()` de `class-transformer`.
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+2. **`ParseIdPipe` Personalizado** (`src/students/pipes/parse-id.pipe.ts`):
+   - Valida y transforma los parámetros de ruta (`:id`, `:studentId`, `:courseId`).
+   - Rechaza valores no numéricos, números menores o iguales a 0 y decimales con un error `400 Bad Request`.
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+---
 
-## Resources
+## 📋 Tabla de Endpoints de la API
 
-Check out a few resources that may come in handy when working with NestJS:
+| Módulo | Método | Endpoint | Descripción | Body / Query | Código Éxito | Códigos Error |
+| :--- | :---: | :--- | :--- | :--- | :---: | :---: |
+| **App** | `GET` | `/` | Estado general de la API | N/A | `200 OK` | - |
+| **Courses** | `GET` | `/courses` | Listar cursos (filtro opcional por nivel) | Query: `level` | `200 OK` | - |
+| **Courses** | `GET` | `/courses/:id` | Obtener curso por ID | Param: `id` | `200 OK` | `404` |
+| **Courses** | `POST` | `/courses` | Crear nuevo curso | Body: `CreateCourseDto` | `201 Created` | `400` |
+| **Courses** | `PATCH` | `/courses/:id` | Modificar curso | Body: `{ title?, level? }` | `200 OK` | `404` |
+| **Courses** | `DELETE` | `/courses/:id` | Eliminar curso | Param: `id` | `200 OK` | `404` |
+| **Students** | `GET` | `/students` | Listar estudiantes con filtros | Query: `career`, `semester`, `isActive` | `200 OK` | `400` |
+| **Students** | `GET` | `/students/:id` | Obtener estudiante por ID | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Students** | `POST` | `/students` | Registrar estudiante | Body: `CreateStudentDto` | `201 Created` | `400, 409` |
+| **Students** | `PATCH` | `/students/:id` | Actualizar datos del estudiante | Body: `UpdateStudentDto` | `200 OK` | `400, 404, 409` |
+| **Students** | `PATCH` | `/students/:id/status` | Cambiar estado activo/inactivo | Body: `UpdateStudentStatusDto` | `200 OK` | `400, 404` |
+| **Students** | `DELETE` | `/students/:id` | Eliminar estudiante (solo si activo) | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Enrollments** | `POST` | `/enrollments` | Registrar matrícula | Body: `CreateEnrollmentDto` | `201 Created` | `400, 404, 409` |
+| **Enrollments** | `GET` | `/enrollments` | Listar matrículas con filtros | Query: `studentId`, `courseId` | `200 OK` | `400` |
+| **Enrollments** | `GET` | `/enrollments/:id` | Obtener matrícula por ID | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Enrollments** | `GET` | `/students/:studentId/enrollments` | Matrículas de un estudiante | Param: `studentId` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Enrollments** | `GET` | `/courses/:courseId/enrollments` | Matrículas de un curso | Param: `courseId` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Enrollments** | `DELETE` | `/enrollments/:id` | Cancelar/eliminar matrícula | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## 🧪 Evidencias y Demostraciones Paso a Paso
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Los datos iniciales de prueba en memoria son:
+- **Estudiantes**:
+  - `ID: 1` -> Ana García (`isActive: true`)
+  - `ID: 2` -> Carlos López (`isActive: false`)
+  - `ID: 3` -> María Rodríguez (`isActive: true`)
+- **Cursos**:
+  - `ID: 1` -> NestJS Fundamentals (`level: beginner`)
+  - `ID: 2` -> REST APIs with NestJS (`level: beginner`)
+  - `ID: 3` -> NestJS Architecture (`level: intermediate`)
 
-## Stay in touch
+---
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### 1️⃣ Demostración: Matrícula Válida (`POST /enrollments` -> `201 Created`)
 
-## License
+**Request**:
+```http
+POST /enrollments HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+{
+  "studentId": 1,
+  "courseId": 1
+}
+```
+
+**Response**: `201 Created`
+```json
+{
+  "id": 1,
+  "studentId": 1,
+  "courseId": 1
+}
+```
+
+---
+
+### 2️⃣ Demostración: Matrícula Duplicada (`POST /enrollments` -> `409 Conflict`)
+
+Intentar matricular al mismo estudiante (`studentId: 1`) en el mismo curso (`courseId: 1`) por segunda vez.
+
+**Request**:
+```http
+POST /enrollments HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+
+{
+  "studentId": 1,
+  "courseId": 1
+}
+```
+
+**Response**: `409 Conflict`
+```json
+{
+  "message": "El estudiante con identificador 1 ya se encuentra matriculado en el curso 1.",
+  "error": "Conflict",
+  "statusCode": 409
+}
+```
+
+---
+
+### 3️⃣ Demostración: Matrícula con Estudiante Inactivo (`POST /enrollments` -> `400 Bad Request`)
+
+El estudiante con `ID: 2` (Carlos López) se encuentra en estado inactivo (`isActive: false`).
+
+**Request**:
+```http
+POST /enrollments HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+
+{
+  "studentId": 2,
+  "courseId": 1
+}
+```
+
+**Response**: `400 Bad Request`
+```json
+{
+  "message": "El estudiante 'Carlos López' (ID: 2) se encuentra inactivo y no puede matricularse en ningún curso.",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```
+
+---
+
+### 4️⃣ Demostración: Matrícula con Identificador Inexistente (`POST /enrollments` -> `404 Not Found`)
+
+#### A. Estudiante Inexistente (`studentId: 999`)
+**Request**:
+```http
+POST /enrollments HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+
+{
+  "studentId": 999,
+  "courseId": 1
+}
+```
+
+**Response**: `404 Not Found`
+```json
+{
+  "message": "Estudiante con identificador 999 no encontrado.",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+#### B. Curso Inexistente (`courseId: 999`)
+**Request**:
+```http
+POST /enrollments HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+
+{
+  "studentId": 1,
+  "courseId": 999
+}
+```
+
+**Response**: `404 Not Found`
+```json
+{
+  "message": "Curso con identificador 999 no encontrado.",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+---
+
+### 5️⃣ Demostración: Filtros Combinados en Matrículas (`GET /enrollments`)
+
+Asumiendo que existen matrículas registradas:
+- Matrícula 1: `studentId: 1, courseId: 1`
+- Matrícula 2: `studentId: 1, courseId: 2`
+- Matrícula 3: `studentId: 3, courseId: 1`
+
+#### A. Filtrar por estudiante (`GET /enrollments?studentId=1`)
+**Response**: `200 OK`
+```json
+[
+  { "id": 1, "studentId": 1, "courseId": 1 },
+  { "id": 2, "studentId": 1, "courseId": 2 }
+]
+```
+
+#### B. Filtrar por curso (`GET /enrollments?courseId=1`)
+**Response**: `200 OK`
+```json
+[
+  { "id": 1, "studentId": 1, "courseId": 1 },
+  { "id": 3, "studentId": 3, "courseId": 1 }
+]
+```
+
+#### C. Filtro Combinado (`GET /enrollments?studentId=3&courseId=1`)
+**Response**: `200 OK`
+```json
+[
+  { "id": 3, "studentId": 3, "courseId": 1 }
+]
+```
+
+#### D. Consultar por ruta anidada de estudiante (`GET /students/1/enrollments`)
+**Response**: `200 OK`
+```json
+[
+  { "id": 1, "studentId": 1, "courseId": 1 },
+  { "id": 2, "studentId": 1, "courseId": 2 }
+]
+```
+
+#### E. Consultar por ruta anidada de curso (`GET /courses/1/enrollments`)
+**Response**: `200 OK`
+```json
+[
+  { "id": 1, "studentId": 1, "courseId": 1 },
+  { "id": 3, "studentId": 3, "courseId": 1 }
+]
+```
+
+---
+
+### 6️⃣ Demostración: Cancelación de una Matrícula (`DELETE /enrollments/:id`)
+
+#### A. Cancelar matrícula existente con `ID: 1`
+**Request**:
+```http
+DELETE /enrollments/1 HTTP/1.1
+Host: localhost:3000
+```
+
+**Response**: `200 OK`
+```json
+{
+  "id": 1,
+  "studentId": 1,
+  "courseId": 1
+}
+```
+
+#### B. Verificar que ya no existe (`GET /enrollments/1` -> `404 Not Found`)
+**Request**:
+```http
+GET /enrollments/1 HTTP/1.1
+Host: localhost:3000
+```
+
+**Response**: `404 Not Found`
+```json
+{
+  "message": "Matrícula con identificador 1 no encontrada.",
+  "error": "Not Found",
+  "statusCode": 404
+}
+```
+
+#### C. Validación de parámetro inválido con Pipe (`DELETE /enrollments/abc` -> `400 Bad Request`)
+**Response**: `400 Bad Request`
+```json
+{
+  "message": "El identificador 'abc' no es válido. Debe ser un número entero positivo mayor a 0.",
+  "error": "Bad Request",
+  "statusCode": 400
+}
+```

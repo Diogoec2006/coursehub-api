@@ -14,21 +14,21 @@ export class StudentsService {
     private students: Student[] = [
         {
             id: 1,
-            name: 'Diogo Sánchez',
-            email: 'diogosan12@gmail.com',
+            name: 'Ana García',
+            email: 'ana.garcia@example.com',
             age: 20,
             career: 'Ingeniería de Sistemas',
-            semester: 5,
+            semester: 4,
             isActive: true,
         },
         {
             id: 2,
-            name: 'Kevin Alonso',
-            email: 'kevin.alonso@gmail.com',
+            name: 'Carlos López',
+            email: 'carlos.lopez@example.com',
             age: 22,
-            career: 'Economia',
+            career: 'Medicina',
             semester: 6,
-            isActive: true,
+            isActive: false,
         },
         {
             id: 3,
