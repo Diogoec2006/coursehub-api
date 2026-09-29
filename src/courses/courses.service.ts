@@ -1,68 +1,60 @@
-import { Injectable } from '@nestjs/common';
-import { CreateCourseDto } from './dto/create-course.dto.js'; // Nota: En NestJS estándar normalmente se omite el .js al final, a menos que uses "NodeNext" en tu tsconfig.
-
-type Course = {
-  id: number;
-  title: string;
-  level: string;
-};
-
-type CreateCourseInput = {
-  title: string;
-  level: string;
-};
-
-type UpdateCourseInput = {
-  title?: string;
-  level?: string;
-};
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { CreateCourseDto } from './dto/create-course.dto.js';
+import { UpdateCourseDto } from './dto/update-couerse.dto.js'; // Asegúrate de tener este DTO
+import { Course } from './entities/course.entity.js';
 
 @Injectable()
 export class CoursesService {
-  private courses: Course[] = [
-    { id: 1, title: 'NestJS Fundamentals', level: 'beginner' },
-    { id: 2, title: 'REST APIs with NestJS', level: 'beginner' },
-    { id: 3, title: 'NestJS Architecture', level: 'intermediate' },
-  ];
-  private nextId: number = 4;
+  // Inyectamos el repositorio para conectar con PostgreSQL y TypeORM
+  constructor(
+    @InjectRepository(Course) 
+    private readonly courseRepository: Repository<Course>
+  ) {}
 
-  findAll(level?: string): Course[] {
+  // GET: Devuelve toda la colección, opcionalmente filtrada por level
+  async findAll(level?: string): Promise<Course[]> {
     if (!level) {
-      return this.courses;
+      return await this.courseRepository.find();
     }
-
-    return this.courses.filter((course) => course.level === level);
+    return await this.courseRepository.find({ where: { level } });
   }
 
-  findOne(id: number): Course | undefined {
-    return this.courses.find((course) => course.id === id);
-  }
-
-  create(createCourseDto: CreateCourseDto): Course {
-    const course = { id: this.nextId++, ...createCourseDto };
-    this.courses.push(course);
-    return course;
-  }
-
-  update(id: number, input: UpdateCourseInput): Course | undefined {
-    const course = this.findOne(id);
-
+  // GET por ID: Devuelve un curso específico o lanza error 404 (Requisito de etapa)
+  async findOne(id: number): Promise<Course> {
+    const course = await this.courseRepository.findOneBy({ id });
+    
+    // Centralizamos la decisión de error en el servicio
     if (!course) {
-      return undefined;
+      throw new NotFoundException(`Course with ID ${id} not found`);
     }
-
-    Object.assign(course, input);
+    
     return course;
   }
 
-  remove(id: number): Course | undefined {
-    const index = this.courses.findIndex((course) => course.id === id);
+  // POST: Crea y persiste el recurso en PostgreSQL
+  async create(createCourseDto: CreateCourseDto): Promise<Course> {
+    const newCourse = this.courseRepository.create(createCourseDto);
+    return await this.courseRepository.save(newCourse);
+  }
 
-    if (index === -1) {
-      return undefined;
-    }
+  // PATCH: Actualiza parcialmente un curso
+  async update(id: number, updateCourseDto: UpdateCourseDto): Promise<Course> {
+    // Reutilizamos findOne que ya maneja el error 404 si no existe
+    const course = await this.findOne(id);
+    
+    // Mezclamos los datos nuevos con los existentes
+    Object.assign(course, updateCourseDto);
+    
+    return await this.courseRepository.save(course);
+  }
 
-    const [removedCourse] = this.courses.splice(index, 1);
-    return removedCourse;
+  // DELETE: Elimina un curso
+  async remove(id: number): Promise<Course> {
+    // Buscamos el curso primero para devolverlo y asegurarnos de que exista
+    const course = await this.findOne(id);
+    await this.courseRepository.remove(course);
+    return course;
   }
 }

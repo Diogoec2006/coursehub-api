@@ -5,6 +5,6 @@ export class CreateCourseDto {
   @IsNotEmpty()
   title: string;
 
-  @IsIn(['beginner', 'intermediate', 'advanced']) // 5
+  @IsIn(['principiante', 'intermedio', 'avanzado']) // 5
   level: string;
 }
