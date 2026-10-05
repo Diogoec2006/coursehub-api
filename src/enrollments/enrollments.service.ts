@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Enrollment } from './entities/enrollment.entity.js';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto.js';
 import { GetEnrollmentsFilterDto } from './dto/get-enrollments-filter.dto.js';
@@ -12,19 +14,18 @@ import { CoursesService } from '../courses/courses.service.js';
 
 @Injectable()
 export class EnrollmentsService {
-  private readonly enrollments: Enrollment[] = [];
-  private nextId = 1;
-
   constructor(
+    @InjectRepository(Enrollment)
+    private readonly enrollmentsRepository: Repository<Enrollment>,
     private readonly studentsService: StudentsService,
     private readonly coursesService: CoursesService,
   ) {}
 
-  create(createEnrollmentDto: CreateEnrollmentDto): Enrollment {
+  async create(createEnrollmentDto: CreateEnrollmentDto): Promise<Enrollment> {
     const { studentId, courseId } = createEnrollmentDto;
 
-    // 1. Validar existencia del estudiante
-    const student = this.studentsService.findOne(studentId);
+    // 1. Validar existencia del estudiante (lanza 404 si no existe)
+    const student = await this.studentsService.findOne(studentId);
 
     // 2. Validar que el estudiante esté activo
     if (!student.isActive) {
@@ -33,58 +34,54 @@ export class EnrollmentsService {
       );
     }
 
-    // 3. Validar existencia del curso
-    const course = this.coursesService.findOne(courseId);
-    if (!course) {
-      throw new NotFoundException(
-        `Curso con identificador ${courseId} no encontrado.`,
-      );
-    }
+    // 3. Validar existencia del curso (lanza 404 si no existe)
+    const course = await this.coursesService.findOne(courseId);
 
-    // 4. Validar que no exista matrícula duplicada
-    const alreadyEnrolled = this.enrollments.some(
-      (enrollment) =>
-        enrollment.studentId === studentId && enrollment.courseId === courseId,
-    );
+    // 4. Validar que no exista matrícula duplicada en la BD
+    const existingEnrollment = await this.enrollmentsRepository.findOne({
+      where: {
+        student: { id: studentId },
+        course: { id: courseId },
+      },
+    });
 
-    if (alreadyEnrolled) {
+    if (existingEnrollment) {
       throw new ConflictException(
         `El estudiante con identificador ${studentId} ya se encuentra matriculado en el curso ${courseId}.`,
       );
     }
 
-    const newEnrollment: Enrollment = {
-      id: this.nextId++,
-      studentId,
-      courseId,
-    };
+    // 5. Crear y guardar la relación en PostgreSQL
+    const enrollment = this.enrollmentsRepository.create({
+      student,
+      course,
+    });
 
-    this.enrollments.push(newEnrollment);
-    return newEnrollment;
+    return this.enrollmentsRepository.save(enrollment);
   }
 
-  findAll(filterDto?: GetEnrollmentsFilterDto): Enrollment[] {
-    let result = [...this.enrollments];
+  async findAll(filterDto?: GetEnrollmentsFilterDto): Promise<Enrollment[]> {
+    const query = this.enrollmentsRepository.createQueryBuilder('enrollment')
+      .leftJoinAndSelect('enrollment.student', 'student')
+      .leftJoinAndSelect('enrollment.course', 'course');
 
-    if (!filterDto) {
-      return result;
+    if (filterDto?.studentId) {
+      query.andWhere('student.id = :studentId', { studentId: filterDto.studentId });
     }
 
-    const { studentId, courseId } = filterDto;
-
-    if (studentId !== undefined) {
-      result = result.filter((e) => e.studentId === studentId);
+    if (filterDto?.courseId) {
+      query.andWhere('course.id = :courseId', { courseId: filterDto.courseId });
     }
 
-    if (courseId !== undefined) {
-      result = result.filter((e) => e.courseId === courseId);
-    }
-
-    return result;
+    return query.getMany();
   }
 
-  findOne(id: number): Enrollment {
-    const enrollment = this.enrollments.find((e) => e.id === id);
+  async findOne(id: number): Promise<Enrollment> {
+    const enrollment = await this.enrollmentsRepository.findOne({
+      where: { id },
+      relations: { student: true, course: true }, // Carga los datos relacionados
+    });
+
     if (!enrollment) {
       throw new NotFoundException(
         `Matrícula con identificador ${id} no encontrada.`,
@@ -93,32 +90,24 @@ export class EnrollmentsService {
     return enrollment;
   }
 
-  findByStudentId(studentId: number): Enrollment[] {
-    // Valida que el estudiante exista (lanza NotFoundException si no existe)
-    this.studentsService.findOne(studentId);
-    return this.enrollments.filter((e) => e.studentId === studentId);
+  async findByStudentId(studentId: number): Promise<Enrollment[]> {
+    await this.studentsService.findOne(studentId); // Valida existencia
+    return this.enrollmentsRepository.find({
+      where: { student: { id: studentId } },
+      relations: { student: true, course: true },
+    });
   }
 
-  findByCourseId(courseId: number): Enrollment[] {
-    // Valida que el curso exista (lanza NotFoundException si no existe)
-    const course = this.coursesService.findOne(courseId);
-    if (!course) {
-      throw new NotFoundException(
-        `Curso con identificador ${courseId} no encontrado.`,
-      );
-    }
-    return this.enrollments.filter((e) => e.courseId === courseId);
+  async findByCourseId(courseId: number): Promise<Enrollment[]> {
+    await this.coursesService.findOne(courseId); // Valida existencia
+    return this.enrollmentsRepository.find({
+      where: { course: { id: courseId } },
+      relations: { student: true, course: true },
+    });
   }
 
-  remove(id: number): Enrollment {
-    const index = this.enrollments.findIndex((e) => e.id === id);
-    if (index === -1) {
-      throw new NotFoundException(
-        `Matrícula con identificador ${id} no encontrada.`,
-      );
-    }
-
-    const [removedEnrollment] = this.enrollments.splice(index, 1);
-    return removedEnrollment;
+  async remove(id: number): Promise<Enrollment> {
+    const enrollment = await this.findOne(id);
+    return this.enrollmentsRepository.remove(enrollment);
   }
 }
