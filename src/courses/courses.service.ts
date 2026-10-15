@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateCourseDto } from './dto/create-course.dto.js';
+import { CoursesQueryDto } from './dto/courses-query.dto.js';
 import { UpdateCourseDto } from './dto/update-couerse.dto.js'; // Asegúrate de tener este DTO
 import { Course } from './entities/course.entity.js';
 
@@ -13,12 +14,36 @@ export class CoursesService {
     private readonly courseRepository: Repository<Course>
   ) {}
 
-  // GET: Devuelve toda la colección, opcionalmente filtrada por level
-  async findAll(level?: string): Promise<Course[]> {
-    if (!level) {
-      return await this.courseRepository.find();
-    }
-    return await this.courseRepository.find({ where: { level } });
+  // GET: Devuelve la colección paginada, con metadatos de navegación, filtros y ordenamiento predecible
+  async findAll(queryDto: CoursesQueryDto = new CoursesQueryDto()): Promise<{
+    items: Course[];
+    meta: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const { page = 1, limit = 10, sortBy = 'id', order = 'ASC', level } = queryDto;
+
+    const [items, total] = await this.courseRepository.findAndCount({
+      where: level ? { level } : {},
+      order: { [sortBy]: order },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+    };
   }
 
   // GET por ID: Devuelve un curso específico o lanza error 404 (Requisito de etapa)

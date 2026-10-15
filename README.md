@@ -96,7 +96,7 @@ npm run test:e2e
 | Módulo | Método | Endpoint | Descripción | Body / Query | Código Éxito | Códigos Error |
 | :--- | :---: | :--- | :--- | :--- | :---: | :---: |
 | **App** | `GET` | `/` | Estado general de la API | N/A | `200 OK` | - |
-| **Courses** | `GET` | `/courses` | Listar cursos (filtro opcional por nivel) | Query: `level` | `200 OK` | - |
+| **Courses** | `GET` | `/courses` | Listar cursos paginados, filtrados y ordenados | Query: `level`, `page`, `limit`, `sortBy`, `order` | `200 OK` | `400` |
 | **Courses** | `GET` | `/courses/:id` | Obtener curso por ID | Param: `id` | `200 OK` | `404` |
 | **Courses** | `POST` | `/courses` | Crear nuevo curso | Body: `CreateCourseDto` | `201 Created` | `400` |
 | **Courses** | `PATCH` | `/courses/:id` | Modificar curso | Body: `{ title?, level? }` | `200 OK` | `404` |
@@ -108,7 +108,7 @@ npm run test:e2e
 | **Students** | `PATCH` | `/students/:id/status` | Cambiar estado activo/inactivo | Body: `UpdateStudentStatusDto` | `200 OK` | `400, 404` |
 | **Students** | `DELETE` | `/students/:id` | Eliminar estudiante (solo si activo) | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
 | **Enrollments** | `POST` | `/enrollments` | Registrar matrícula | Body: `CreateEnrollmentDto` | `201 Created` | `400, 404, 409` |
-| **Enrollments** | `GET` | `/enrollments` | Listar matrículas con filtros | Query: `studentId`, `courseId` | `200 OK` | `400` |
+| **Enrollments** | `GET` | `/enrollments` | Listar matrículas con búsqueda compuesta, JOINs y paginación | Query: `search`, `studentId`, `courseId`, `activeOnly`, `page`, `limit` | `200 OK` | `400` |
 | **Enrollments** | `GET` | `/enrollments/:id` | Obtener matrícula por ID | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
 | **Enrollments** | `GET` | `/students/:studentId/enrollments` | Matrículas de un estudiante | Param: `studentId` (ParseIdPipe) | `200 OK` | `400, 404` |
 | **Enrollments** | `GET` | `/courses/:courseId/enrollments` | Matrículas de un curso | Param: `courseId` (ParseIdPipe) | `200 OK` | `400, 404` |
@@ -353,3 +353,176 @@ Host: localhost:3000
   "statusCode": 400
 }
 ```
+
+---
+
+### 7️⃣ Demostración: Navegación Predecible en Cursos (`GET /courses`)
+
+Un listado útil no devuelve todo el conjunto de datos de golpe. El endpoint `GET /courses` ofrece una navegación determinista y robusta mediante validación estricta de parámetros en URL con `CoursesQueryDto`.
+
+#### URL Documentada
+```http
+GET /courses?level=beginner&page=2&limit=5&sortBy=title&order=ASC HTTP/1.1
+Host: localhost:3000
+```
+
+#### Responsabilidad de Cada Parámetro
+| Parámetro | Tipo / Decoradores | Valor por Defecto | Responsabilidad |
+| :--- | :--- | :---: | :--- |
+| `level` | `@IsString() @IsOptional()` | Opcional | Filtra los cursos que coincidan con el nivel indicado. |
+| `page` | `@Type(() => Number) @IsInt() @Min(1)` | `1` | Número de página solicitada. |
+| `limit` | `@Type(() => Number) @IsInt() @Min(1) @Max(50)` | `10` | Cantidad máxima de elementos por página (máximo 50). |
+| `sortBy` | `@IsIn(['id', 'title', 'level'])` | `'id'` | Campo de ordenamiento (lista cerrada para prevenir inyección). |
+| `order` | `@IsIn(['ASC', 'DESC'])` | `'ASC'` | Dirección del ordenamiento (ascendente o descendente). |
+
+> **¿Por qué ordenar aun sin que lo pidan?**  
+> Porque una página sin orden estable puede variar entre consultas sucesivas debido a la naturaleza no determinista de los motores de bases de datos, provocando que se repitan u oculten resultados al navegar entre páginas.
+
+#### Implementación con `findAndCount`
+```typescript
+const [items, total] = await repository.findAndCount({
+  where: level ? { level } : {},
+  order: { [sortBy]: order },
+  skip: (page - 1) * limit,
+  take: limit,
+});
+
+const totalPages = Math.ceil(total / limit);
+```
+
+#### Estructura de Respuesta (Items y Metadatos de Navegación)
+**Response**: `200 OK`
+```json
+{
+  "items": [
+    {
+      "id": 6,
+      "title": "Docker para Desarrolladores",
+      "level": "beginner"
+    },
+    {
+      "id": 7,
+      "title": "Git y GitHub Profesional",
+      "level": "beginner"
+    }
+  ],
+  "meta": {
+    "total": 12,
+    "page": 2,
+    "limit": 5,
+    "totalPages": 3
+  }
+}
+```
+
+#### Contrato y Casos Límite (Rechazo 400 Bad Request)
+Los casos límite son parte integral del contrato de la API:
+- **`page=0`** → Retorna `400 Bad Request` (`page must not be less than 1`).
+- **`limit=200`** → Retorna `400 Bad Request` (`limit must not be greater than 50`).
+- **`sortBy=createdAt`** → Retorna `400 Bad Request` (`sortBy must be one of the following values: id, title, level`).
+- **Sin parámetros (`GET /courses`)** → Retorna la primera página (`page=1`, `limit=10`), ordenada de manera predecible por `id ASC`.
+- **Dos páginas consecutivas** → Al estar indexadas con orden estable y cálculo exacto de `skip` y `take`, no presentan repeticiones entre páginas.
+
+---
+
+### 8️⃣ Demostración: Consulta Compuesta y Búsqueda Segura (`GET /enrollments`)
+
+Buscar datos relacionados exige una consulta compuesta sin abandonar la seguridad del ORM. Conectamos `Enrollment` con `Student` y `Course` utilizando `QueryBuilder`, `JOINs`, búsqueda insensible a mayúsculas/minúsculas y parámetros estrictamente parametrizados para blindar la aplicación contra inyección SQL.
+
+```
+Enrollment ──join──> Student
+     │
+     └──join──> Course
+```
+
+#### URL Documentada
+```http
+GET /enrollments?search=NestJS&activeOnly=true&page=1&limit=10 HTTP/1.1
+Host: localhost:3000
+```
+
+#### Responsabilidad de Parámetros en `EnrollmentsQueryDto`
+| Parámetro | Tipo / Decoradores | Valor por Defecto | Responsabilidad |
+| :--- | :--- | :---: | :--- |
+| `search` | `@IsString() @IsOptional()` | Opcional | Busca por coincidencia parcial (`ILIKE`) en `student.name` o `course.title`. |
+| `studentId` | `@Type(() => Number) @IsInt() @Min(1)` | Opcional | Filtra matrículas de un estudiante específico por ID. |
+| `courseId` | `@Type(() => Number) @IsInt() @Min(1)` | Opcional | Filtra matrículas de un curso específico por ID. |
+| `activeOnly` | `@IsIn(['true', 'false']) @IsOptional()` | Opcional | Si es `'true'`, filtra únicamente matrículas de estudiantes activos. |
+| `page` | `@Type(() => Number) @IsInt() @Min(1)` | `1` | Número de página solicitada. |
+| `limit` | `@Type(() => Number) @IsInt() @Min(1) @Max(50)` | `10` | Cantidad máxima de registros por página (máximo 50). |
+
+#### Implementación con QueryBuilder y Parametrización Segura
+```typescript
+const qb = repository
+  .createQueryBuilder('enrollment')
+  .leftJoinAndSelect('enrollment.student', 'student')
+  .leftJoinAndSelect('enrollment.course', 'course');
+
+// El texto es un valor, nunca una instrucción SQL
+if (query.search && query.search.trim() !== '') {
+  qb.andWhere(
+    '(student.name ILIKE :search OR course.title ILIKE :search)',
+    { search: `%${query.search.trim()}%` },
+  );
+}
+
+// Cada condición se agrega solo si llegó
+if (query.studentId) {
+  qb.andWhere('student.id = :studentId', { studentId: query.studentId });
+}
+
+if (query.courseId) {
+  qb.andWhere('course.id = :courseId', { courseId: query.courseId });
+}
+
+if (query.activeOnly === 'true') {
+  qb.andWhere('student.isActive = :active', { active: true });
+}
+
+qb.orderBy('enrollment.id', 'ASC')
+  .skip((page - 1) * limit)
+  .take(limit);
+
+const [items, total] = await qb.getManyAndCount();
+```
+
+#### Estructura de Respuesta
+**Response**: `200 OK`
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "student": {
+        "id": 1,
+        "name": "Ana García",
+        "email": "ana.garcia@example.com",
+        "semester": 4,
+        "isActive": true
+      },
+      "course": {
+        "id": 1,
+        "title": "NestJS Fundamentals",
+        "level": "beginner"
+      }
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+#### Seguridad y Casos Límite
+1. **Protección anti Inyección SQL**:  
+   Entradas con fragmentos SQL maliciosos como `'; DROP TABLE enrollments; --` son tratadas estrictamente como cadenas de texto literal dentro de `:search`, impidiendo la alteración de la consulta.
+2. **Búsqueda sin coincidencias**:  
+   Una búsqueda que no produzca resultados no es un `404 Not Found`. La ruta existe y responde `200 OK` con `items: []` y `total: 0`.
+3. **Validación de Límites**:  
+   - `page=0` → `400 Bad Request`
+   - `limit=200` → `400 Bad Request`
+
+

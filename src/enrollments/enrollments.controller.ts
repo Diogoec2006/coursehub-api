@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service.js';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto.js';
-import { GetEnrollmentsFilterDto } from './dto/get-enrollments-filter.dto.js';
+import { EnrollmentsQueryDto } from './dto/enrollments-query.dto.js';
 import { ParseIdPipe } from '../students/pipes/parse-id.pipe.js';
 
 @Controller()
@@ -25,8 +25,8 @@ export class EnrollmentsController {
   }
 
   @Get('enrollments')
-  findAll(@Query() filterDto: GetEnrollmentsFilterDto) {
-    return this.enrollmentsService.findAll(filterDto);
+  findAll(@Query() query: EnrollmentsQueryDto) {
+    return this.enrollmentsService.findAll(query);
   }
 
   @Get('enrollments/:id')

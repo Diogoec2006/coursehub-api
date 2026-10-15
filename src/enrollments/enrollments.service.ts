@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Enrollment } from './entities/enrollment.entity.js';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto.js';
-import { GetEnrollmentsFilterDto } from './dto/get-enrollments-filter.dto.js';
+import { EnrollmentsQueryDto } from './dto/enrollments-query.dto.js';
 import { StudentsService } from '../students/students.service.js';
 import { CoursesService } from '../courses/courses.service.js';
 
@@ -60,20 +60,57 @@ export class EnrollmentsService {
     return this.enrollmentsRepository.save(enrollment);
   }
 
-  async findAll(filterDto?: GetEnrollmentsFilterDto): Promise<Enrollment[]> {
-    const query = this.enrollmentsRepository.createQueryBuilder('enrollment')
+  async findAll(query: EnrollmentsQueryDto = new EnrollmentsQueryDto()): Promise<{
+    items: Enrollment[];
+    meta: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }> {
+    const { page = 1, limit = 10, search, studentId, courseId, activeOnly } = query;
+
+    const qb = this.enrollmentsRepository
+      .createQueryBuilder('enrollment')
       .leftJoinAndSelect('enrollment.student', 'student')
       .leftJoinAndSelect('enrollment.course', 'course');
 
-    if (filterDto?.studentId) {
-      query.andWhere('student.id = :studentId', { studentId: filterDto.studentId });
+    if (search && search.trim() !== '') {
+      qb.andWhere(
+        '(student.name ILIKE :search OR course.title ILIKE :search)',
+        { search: `%${search.trim()}%` },
+      );
     }
 
-    if (filterDto?.courseId) {
-      query.andWhere('course.id = :courseId', { courseId: filterDto.courseId });
+    if (studentId) {
+      qb.andWhere('student.id = :studentId', { studentId });
     }
 
-    return query.getMany();
+    if (courseId) {
+      qb.andWhere('course.id = :courseId', { courseId });
+    }
+
+    if (activeOnly === 'true') {
+      qb.andWhere('student.isActive = :active', { active: true });
+    }
+
+    qb.orderBy('enrollment.id', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+    };
   }
 
   async findOne(id: number): Promise<Enrollment> {
