@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Unique, type Relation } from 'typeorm';
 import { Student } from '../../students/entities/student.entity.js';
 import { Course } from '../../courses/entities/course.entity.js';
 
@@ -10,9 +10,9 @@ export class Enrollment {
 
   @ManyToOne(() => Student, (student) => student.enrollments, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'student_id' }) // Clave foránea explícita hacia students
-  student: Student;
+  student: Relation<Student>;
 
   @ManyToOne(() => Course, (course) => course.enrollments, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'course_id' }) // Clave foránea explícita hacia courses
-  course: Course;
+  course: Relation<Course>;
 }

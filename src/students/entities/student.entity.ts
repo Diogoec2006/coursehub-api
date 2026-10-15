@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
 import { Enrollment } from '../../enrollments/entities/enrollment.entity.js';
 
 @Entity('students')
@@ -19,5 +19,5 @@ export class Student {
   isActive: boolean;
 
   @OneToMany(() => Enrollment, (enrollment) => enrollment.student)
-  enrollments: Enrollment[];
+  enrollments: Relation<Enrollment>[];
 }
