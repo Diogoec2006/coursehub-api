@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -11,6 +13,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  const config = app.get(ConfigService);
+  const port = config.getOrThrow<number>('PORT');
+  const nodeEnv = config.getOrThrow<string>('NODE_ENV');
+  await app.listen(port);
+  logger.log(`Application running in "${nodeEnv}" mode on port ${port}`);
 }
 await bootstrap();

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import Joi from 'joi';
+
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { WelcomeController } from './welcome.controller.js';
@@ -12,21 +14,34 @@ import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 
 @Module({
   imports: [
-    // Configuración global para variables de entorno (.env)
-    ConfigModule.forRoot({ isGlobal: true }),
+    // Configuración global para variables de entorno con validación previa al inicio
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: Joi.object({
+        NODE_ENV: Joi.string()
+          .valid('development', 'production', 'test')
+          .default('development'),
+        PORT: Joi.number().port().default(3000),
+        DB_HOST: Joi.string().required(),
+        DB_PORT: Joi.number().port().default(5432),
+        DB_NAME: Joi.string().required(),
+        DB_USER: Joi.string().required(),
+        DB_PASSWORD: Joi.string().allow('').default(''),
+      }),
+    }),
     
     // Configuración asíncrona de TypeORM usando variables de entorno
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres', 
-        host: config.getOrThrow('DATABASE_HOST'),
-        port: Number(config.getOrThrow('DATABASE_PORT')),
-        username: config.getOrThrow('DATABASE_USER'),
-        password: config.getOrThrow('DATABASE_PASSWORD'),
-        database: config.getOrThrow('DATABASE_NAME'),
+        host: config.getOrThrow<string>('DB_HOST'),
+        port: Number(config.getOrThrow('DB_PORT')),
+        username: config.getOrThrow<string>('DB_USER'),
+        password: config.get<string>('DB_PASSWORD', ''),
+        database: config.getOrThrow<string>('DB_NAME'),
         autoLoadEntities: true, 
-        synchronize: true,
+        synchronize: config.getOrThrow<string>('NODE_ENV') === 'development',
       }),
     }),
     

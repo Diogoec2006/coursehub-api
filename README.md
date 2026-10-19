@@ -525,4 +525,78 @@ const [items, total] = await qb.getManyAndCount();
    - `page=0` → `400 Bad Request`
    - `limit=200` → `400 Bad Request`
 
+---
+
+## 🔐 Configuración Segura y Variables de Entorno (Semana 7 - Etapa 2)
+
+La configuración de CourseHub API sigue los principios de aplicaciones *Twelve-Factor*: la configuración varía por entorno y **nunca pertenece al código ni se versiona en el repositorio**.
+
+### 1. Variables de Entorno y Plantilla `.env.example`
+
+Para desplegar o levantar la aplicación localmente, cree un archivo `.env` basado en la plantilla segura `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Contenido de `.env.example`:
+```env
+NODE_ENV=development
+PORT=3000
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=coursehub
+DB_USER=postgres
+DB_PASSWORD=replace-with-your-local-password
+```
+
+### 2. Validación Temprana con Joi
+
+El arranque de la API valida estrictamente las variables de entorno antes de iniciar cualquier conexión a la base de datos mediante `ConfigModule.forRoot`:
+
+```typescript
+ConfigModule.forRoot({
+  isGlobal: true,
+  validationSchema: Joi.object({
+    NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+    PORT: Joi.number().port().default(3000),
+    DB_HOST: Joi.string().required(),
+    DB_PORT: Joi.number().port().default(5432),
+    DB_NAME: Joi.string().required(),
+    DB_USER: Joi.string().required(),
+    DB_PASSWORD: Joi.string().allow('').default(''),
+  }),
+});
+```
+
+> **Detención en fallo de configuración**: Si una variable requerida (como `DB_NAME` o `DB_HOST`) no está presente o el puerto no es válido, la API se detiene inmediatamente arrojando un error claro de validación y protegiendo el sistema.
+
+### 3. Diferenciación de Ambientes: Política de `synchronize`
+
+La conexión con TypeORM se realiza de forma asíncrona mediante `TypeOrmModule.forRootAsync`, inyectando `ConfigService`:
+
+```typescript
+TypeOrmModule.forRootAsync({
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => ({
+    type: 'postgres',
+    host: config.getOrThrow<string>('DB_HOST'),
+    port: Number(config.getOrThrow('DB_PORT')),
+    username: config.getOrThrow<string>('DB_USER'),
+    password: config.get<string>('DB_PASSWORD', ''),
+    database: config.getOrThrow<string>('DB_NAME'),
+    autoLoadEntities: true,
+    synchronize: config.getOrThrow<string>('NODE_ENV') === 'development',
+  }),
+});
+```
+
+* **Desarrollo (`development`)**: `synchronize: true` está permitido localmente para facilitar la evolución de entidades.
+* **Producción (`production`)**: `synchronize: false` obligatorio para prevenir pérdida o alteración accidental de datos en la base de datos real.
+
+### 4. Seguridad de Secretos y Diagnóstico
+* `.env` está explicitamente ignorado en `.gitignore` y nunca se sube a control de versiones.
+* Se prohíbe el uso de `console.log(config)` o volcados de secretos en logs de inicio o ejecución. Solo se registran datos no sensibles (`NODE_ENV` y `PORT`).
+
+
 
