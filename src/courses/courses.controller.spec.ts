@@ -4,6 +4,8 @@ import { CoursesController } from './courses.controller.js';
 import { CoursesService } from './courses.service.js';
 import { CoursesQueryDto } from './dto/courses-query.dto.js';
 
+import { AuthGuard } from '../auth/guards/auth.guard.js';
+
 describe('CoursesController', () => {
   let controller: CoursesController;
   let service: CoursesService;
@@ -26,7 +28,10 @@ describe('CoursesController', () => {
           useValue: mockCoursesService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<CoursesController>(CoursesController);
     service = module.get<CoursesService>(CoursesService);

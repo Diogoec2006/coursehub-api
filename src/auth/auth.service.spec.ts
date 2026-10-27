@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
 import { AuthService } from './auth.service.js';
@@ -13,6 +14,10 @@ describe('AuthService', () => {
     findByEmailWithPassword: vi.fn(),
   };
 
+  const mockJwtService = {
+    signAsync: vi.fn(),
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
@@ -21,6 +26,10 @@ describe('AuthService', () => {
         {
           provide: UsersService,
           useValue: mockUsersService,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
       ],
     }).compile();
@@ -65,8 +74,8 @@ describe('AuthService', () => {
     });
   });
 
-  describe('login', () => {
-    it('debe autenticar con credenciales correctas y retornar el usuario seguro sin passwordHash', async () => {
+  describe('validateCredentials', () => {
+    it('debe validar credenciales correctas y retornar el usuario seguro sin passwordHash', async () => {
       const rawPassword = 'MiPasswordSeguro123!';
       const hash = await bcrypt.hash(rawPassword, 12);
 
@@ -80,10 +89,10 @@ describe('AuthService', () => {
 
       mockUsersService.findByEmailWithPassword.mockResolvedValue(fakeUserWithHash);
 
-      const result = await service.login({
-        email: 'estudiante@coursehub.edu',
-        password: rawPassword,
-      });
+      const result = await service.validateCredentials(
+        'estudiante@coursehub.edu',
+        rawPassword,
+      );
 
       expect(mockUsersService.findByEmailWithPassword).toHaveBeenCalledWith('estudiante@coursehub.edu');
       expect(result).not.toHaveProperty('passwordHash');
@@ -102,14 +111,60 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.login({
-          email: 'estudiante@coursehub.edu',
-          password: 'PasswordErroneo999!',
-        }),
+        service.validateCredentials(
+          'estudiante@coursehub.edu',
+          'PasswordErroneo999!',
+        ),
       ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
     });
 
     it('debe lanzar el mismo UnauthorizedException ("Invalid credentials") si el usuario no existe', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue(null);
+
+      await expect(
+        service.validateCredentials(
+          'no.existe@coursehub.edu',
+          'CualquierPassword123!',
+        ),
+      ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+    });
+  });
+
+  describe('login', () => {
+    it('debe emitir un accessToken firmado con payload explícito { sub, email } y retornar { accessToken, user }', async () => {
+      const rawPassword = 'MiPasswordSeguro123!';
+      const hash = await bcrypt.hash(rawPassword, 12);
+
+      const fakeUserWithHash = {
+        id: 1,
+        email: 'estudiante@coursehub.edu',
+        passwordHash: hash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockUsersService.findByEmailWithPassword.mockResolvedValue(fakeUserWithHash);
+      mockJwtService.signAsync.mockResolvedValue('signed-jwt-token');
+
+      const result = await service.login({
+        email: 'estudiante@coursehub.edu',
+        password: rawPassword,
+      });
+
+      expect(result).toHaveProperty('accessToken', 'signed-jwt-token');
+      expect(result).toHaveProperty('user');
+      expect(result.user).not.toHaveProperty('passwordHash');
+      expect(result.user.id).toBe(1);
+      expect(result.user.email).toBe('estudiante@coursehub.edu');
+
+      // Verifica que el payload firmado contiene estrictamente sub y email
+      expect(mockJwtService.signAsync).toHaveBeenCalledWith({
+        sub: 1,
+        email: 'estudiante@coursehub.edu',
+      });
+    });
+
+    it('nunca debe firmar un token si las credenciales son inválidas', async () => {
       mockUsersService.findByEmailWithPassword.mockResolvedValue(null);
 
       await expect(
@@ -118,6 +173,9 @@ describe('AuthService', () => {
           password: 'CualquierPassword123!',
         }),
       ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+
+      // CRÍTICO: Nunca firmes antes de validar las credenciales
+      expect(mockJwtService.signAsync).not.toHaveBeenCalled();
     });
   });
 });

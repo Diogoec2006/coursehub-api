@@ -7,10 +7,12 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CoursesService } from './courses.service.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
 import { CoursesQueryDto } from './dto/courses-query.dto.js';
+import { AuthGuard } from '../auth/guards/auth.guard.js';
 
 @Controller('courses')
 export class CoursesController {
@@ -26,6 +28,7 @@ export class CoursesController {
     return this.coursesService.findOne(Number(id));
   }
 
+  @UseGuards(AuthGuard)
   @Post()
   create(@Body() createCourseDto: CreateCourseDto) {
     return this.coursesService.create(createCourseDto);

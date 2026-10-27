@@ -112,6 +112,8 @@ npm run test:e2e
 | **Enrollments** | `GET` | `/enrollments/:id` | Obtener matrícula por ID | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
 | **Enrollments** | `GET` | `/students/:studentId/enrollments` | Matrículas de un estudiante | Param: `studentId` (ParseIdPipe) | `200 OK` | `400, 404` |
 | **Enrollments** | `GET` | `/courses/:courseId/enrollments` | Matrículas de un curso | Param: `courseId` (ParseIdPipe) | `200 OK` | `400, 404` |
+| **Auth** | `POST` | `/auth/register` | Registrar usuario con contraseña hasheada (bcrypt) | Body: `RegisterDto` | `201 Created` | `400, 409` |
+| **Auth** | `POST` | `/auth/login` | Validar credenciales y emitir access token JWT | Body: `LoginDto` | `200 OK` | `400, 401` |
 | **Enrollments** | `DELETE` | `/enrollments/:id` | Cancelar/eliminar matrícula | Param: `id` (ParseIdPipe) | `200 OK` | `400, 404` |
 
 ---
@@ -597,6 +599,59 @@ TypeOrmModule.forRootAsync({
 ### 4. Seguridad de Secretos y Diagnóstico
 * `.env` está explicitamente ignorado en `.gitignore` y nunca se sube a control de versiones.
 * Se prohíbe el uso de `console.log(config)` o volcados de secretos en logs de inicio o ejecución. Solo se registran datos no sensibles (`NODE_ENV` y `PORT`).
+
+---
+
+## 🔑 Autenticación y Emisión de Tokens JWT (Semana 9 - Sesión 17)
+
+CourseHub implementa un esquema de autenticación desacoplada donde el inicio de sesión valida credenciales y emite un token de acceso temporal (**JSON Web Token - RFC 7519**) para evitar la retransmisión continua de contraseñas.
+
+### Contrato de `POST /auth/login`
+
+#### 1. Entrada (`Body: LoginDto`)
+```json
+{
+  "email": "estudiante@coursehub.edu",
+  "password": "PasswordSeguro123!"
+}
+```
+* **Normalización**: El correo se normaliza a minúsculas y se limpia de espacios antes de la consulta.
+* **Validación**: DTO validado con `ValidationPipe` (`email` válido y contraseña de al menos 8 caracteres).
+
+#### 2. Salida Exitosa (`200 OK`)
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiZXN0dWRpYW50ZUBjb3Vyc2VodWIuZWR1IiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDA5MDB9.SIGNATURE_MOCK",
+  "user": {
+    "id": 1,
+    "email": "estudiante@coursehub.edu",
+    "createdAt": "2026-10-27T18:00:00.000Z"
+  }
+}
+```
+
+* **Carga Mínima (`JwtPayload`)**:
+  * `sub`: Identificador numérico único del usuario (`id`).
+  * `email`: Correo normalizado del usuario.
+  * `iat`: Marca de tiempo de emisión generada automáticamente.
+  * `exp`: Marca de tiempo de caducidad calculada según `JWT_EXPIRES_IN`.
+* **Caducidad aproximada**: Por defecto `15m` (15 minutos).
+* **Respuesta segura**: `user` nunca incluye `password` ni `passwordHash`.
+
+#### 3. Casos de Rechazo
+* **Credenciales incorrectas (`401 Unauthorized`)**:
+  * Retorna mensaje genérico `{"statusCode": 401, "message": "Invalid credentials"}`.
+  * Se aplica tanto a contraseñas erróneas como a correos inexistentes para prevenir ataques de enumeración.
+  * **Crítico**: Nunca se emite ni firma un token cuando las credenciales no son válidas.
+* **DTO inválido (`400 Bad Request`)**:
+  * Formato de correo incorrecto o contraseña corta (< 8 caracteres).
+
+> [!WARNING]
+> **Advertencia de Seguridad y Protección de Credenciales:**
+> * Un JWT viaja firmado, **no cifrado**. Cualquier receptor puede decodificar el payload en base64url. Jamás incluya contraseñas, hashes, roles no autorizados ni información confidencial dentro de la carga útil.
+> * Los tokens de acceso emitidos son credenciales vivas: nunca los comparta en capturas de pantalla, foros, repositorios ni chats.
+> * `JWT_SECRET` se gestiona exclusivamente por entorno mediante `.env` (mínimo 32 caracteres) y nunca se incluye en el código fuente.
+
 
 
 

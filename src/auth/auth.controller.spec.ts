@@ -5,6 +5,8 @@ import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 
+import { AuthGuard } from './guards/auth.guard.js';
+
 describe('AuthController', () => {
   let controller: AuthController;
 
@@ -23,7 +25,10 @@ describe('AuthController', () => {
           useValue: mockAuthService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<AuthController>(AuthController);
   });
@@ -56,25 +61,44 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('debe llamar a authService.login y retornar el usuario autenticado', async () => {
+    it('debe llamar a authService.login y retornar el access token y el usuario autenticado', async () => {
       const dto: LoginDto = {
         email: 'estudiante@coursehub.edu',
         password: 'PasswordSeguro123',
       };
 
-      const expectedUser = {
-        id: 1,
-        email: 'estudiante@coursehub.edu',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const expectedResponse = {
+        accessToken: 'signed-jwt-token',
+        user: {
+          id: 1,
+          email: 'estudiante@coursehub.edu',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       };
 
-      mockAuthService.login.mockResolvedValue(expectedUser);
+      mockAuthService.login.mockResolvedValue(expectedResponse);
 
       const result = await controller.login(dto);
 
       expect(mockAuthService.login).toHaveBeenCalledWith(dto);
-      expect(result).toEqual(expectedUser);
+      expect(result).toEqual(expectedResponse);
+    });
+  });
+
+  describe('getProfile (GET /auth/me)', () => {
+    it('debe retornar el usuario asignado en req.user', () => {
+      const mockReq = {
+        user: {
+          sub: 1,
+          email: 'estudiante@coursehub.edu',
+          iat: 1700000000,
+          exp: 1700000900,
+        },
+      } as any;
+
+      const result = controller.getProfile(mockReq);
+      expect(result).toEqual(mockReq.user);
     });
   });
 });

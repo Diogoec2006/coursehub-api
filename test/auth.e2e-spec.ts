@@ -134,8 +134,8 @@ describe('AuthModule (e2e)', () => {
   });
 
   describe('5. Cinco pruebas explican el contrato de Login (POST /auth/login)', () => {
-    // Prueba 1: Correcto → 200 sin hash
-    it('Prueba 1: Login correcto → debe retornar 200 OK y el usuario sin password ni passwordHash', async () => {
+    // Prueba 1: Correcto → 200 + accessToken
+    it('Prueba 1: Login correcto → debe retornar 200 OK con accessToken y usuario sin password ni passwordHash', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/login')
         .send({
@@ -144,14 +144,30 @@ describe('AuthModule (e2e)', () => {
         })
         .expect(200);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body.email).toBe('practica@coursehub.edu');
-      expect(response.body).not.toHaveProperty('password');
-      expect(response.body).not.toHaveProperty('passwordHash');
+      // Verificamos presencia y estructura del accessToken (header.payload.signature)
+      expect(response.body).toHaveProperty('accessToken');
+      expect(typeof response.body.accessToken).toBe('string');
+      const parts = response.body.accessToken.split('.');
+      expect(parts).toHaveLength(3);
+
+      // Audita payload decodificado: sub, email, iat, exp
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+      expect(payload).toHaveProperty('sub');
+      expect(payload.email).toBe('practica@coursehub.edu');
+      expect(payload).toHaveProperty('iat');
+      expect(payload).toHaveProperty('exp');
+      expect(payload.exp).toBeGreaterThan(payload.iat);
+
+      // Verificamos usuario seguro devuelto
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user).toHaveProperty('id');
+      expect(response.body.user.email).toBe('practica@coursehub.edu');
+      expect(response.body.user).not.toHaveProperty('password');
+      expect(response.body.user).not.toHaveProperty('passwordHash');
     });
 
-    // Prueba 2: Password errónea → 401
-    it('Prueba 2: Password errónea → debe retornar 401 Unauthorized con "Invalid credentials"', async () => {
+    // Prueba 2: Password errónea → 401 sin token
+    it('Prueba 2: Password errónea → debe retornar 401 Unauthorized con "Invalid credentials" sin token', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/login')
         .send({
@@ -161,10 +177,11 @@ describe('AuthModule (e2e)', () => {
         .expect(401);
 
       expect(response.body.message).toBe('Invalid credentials');
+      expect(response.body).not.toHaveProperty('accessToken');
     });
 
-    // Prueba 3: Correo inexistente → mismo 401
-    it('Prueba 3: Correo inexistente → debe retornar el mismo 401 Unauthorized genérico (evita enumeración)', async () => {
+    // Prueba 3: Correo inexistente → mismo 401 sin token
+    it('Prueba 3: Correo inexistente → debe retornar el mismo 401 Unauthorized genérico (evita enumeración) sin token', async () => {
       const response = await request(app.getHttpServer())
         .post('/auth/login')
         .send({
@@ -174,6 +191,7 @@ describe('AuthModule (e2e)', () => {
         .expect(401);
 
       expect(response.body.message).toBe('Invalid credentials');
+      expect(response.body).not.toHaveProperty('accessToken');
     });
 
     // Prueba 4: Correo mal formado → 400
@@ -200,6 +218,94 @@ describe('AuthModule (e2e)', () => {
         .expect(400);
 
       expect(response.body.message).toBeDefined();
+    });
+  });
+
+  describe('6. Protección de rutas: GET /auth/me con Bearer token', () => {
+    let validAccessToken: string;
+
+    beforeAll(async () => {
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'practica@coursehub.edu',
+          password: 'PasswordSeguro123!',
+        });
+      validAccessToken = loginRes.body.accessToken;
+    });
+
+    it('debe responder 200 y el payload del usuario autenticado si se envía Bearer token válido', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${validAccessToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('sub');
+      expect(response.body.email).toBe('practica@coursehub.edu');
+    });
+
+    it('debe responder 401 Unauthorized si se consulta /auth/me sin encabezado Authorization', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .expect(401);
+    });
+
+    it('debe responder 401 Unauthorized si se envía un token alterado o inválido', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${validAccessToken}modificado`)
+        .expect(401);
+    });
+  });
+
+  describe('7. Ruta de negocio protegida: POST /courses', () => {
+    let validAccessToken: string;
+
+    beforeAll(async () => {
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'practica@coursehub.edu',
+          password: 'PasswordSeguro123!',
+        });
+      validAccessToken = loginRes.body.accessToken;
+    });
+
+    it('debe rechazar con 401 sin token y verificar que no modifica datos', async () => {
+      await request(app.getHttpServer())
+        .post('/courses')
+        .send({
+          title: 'Curso No Autorizado',
+          level: 'beginner',
+        })
+        .expect(401);
+    });
+
+    it('con token válido pero DTO inválido, debe aplicar las reglas del DTO y responder 400', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/courses')
+        .set('Authorization', `Bearer ${validAccessToken}`)
+        .send({
+          title: '', // título vacío infringe @IsNotEmpty
+          level: 'beginner',
+        })
+        .expect(400);
+
+      expect(response.body.message).toBeDefined();
+    });
+
+    it('con token válido y DTO correcto, debe procesar la regla de negocio y responder 201', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/courses')
+        .set('Authorization', `Bearer ${validAccessToken}`)
+        .send({
+          title: 'Arquitectura Segura NestJS',
+          level: 'intermedio',
+        })
+        .expect(201);
+
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.title).toBe('Arquitectura Segura NestJS');
     });
   });
 });
