@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import Joi from 'joi';
 
@@ -34,6 +36,14 @@ import { AuthModule } from './auth/auth.module.js';
       }),
     }),
     
+    // Rate Limiting (Sesión 20): protección contra abuso y fuerza bruta
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 20,
+      },
+    ]),
+
     // Configuración asíncrona de TypeORM usando variables de entorno
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -57,6 +67,13 @@ import { AuthModule } from './auth/auth.module.js';
     AuthModule,
   ],
   controllers: [AppController, WelcomeController],
-  providers: [AppService, WelcomeService],
+  providers: [
+    AppService,
+    WelcomeService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

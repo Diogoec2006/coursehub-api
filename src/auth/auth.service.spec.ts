@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
 import { AuthService } from './auth.service.js';
 import { UsersService } from '../users/users.service.js';
+import { UserRole } from '../users/enums/user-role.enum.js';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -131,13 +132,14 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('debe emitir un accessToken firmado con payload explícito { sub, email } y retornar { accessToken, user }', async () => {
+    it('debe emitir un accessToken firmado con payload explícito { sub, email, role } y retornar { accessToken, user }', async () => {
       const rawPassword = 'MiPasswordSeguro123!';
       const hash = await bcrypt.hash(rawPassword, 12);
 
       const fakeUserWithHash = {
         id: 1,
         email: 'estudiante@coursehub.edu',
+        role: UserRole.STUDENT,
         passwordHash: hash,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -156,11 +158,13 @@ describe('AuthService', () => {
       expect(result.user).not.toHaveProperty('passwordHash');
       expect(result.user.id).toBe(1);
       expect(result.user.email).toBe('estudiante@coursehub.edu');
+      expect(result.user.role).toBe(UserRole.STUDENT);
 
-      // Verifica que el payload firmado contiene estrictamente sub y email
+      // Verifica que el payload firmado contiene sub, email y rol explícito
       expect(mockJwtService.signAsync).toHaveBeenCalledWith({
         sub: 1,
         email: 'estudiante@coursehub.edu',
+        role: UserRole.STUDENT,
       });
     });
 

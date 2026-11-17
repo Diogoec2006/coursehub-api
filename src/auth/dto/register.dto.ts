@@ -1,5 +1,14 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { UserRole } from '../../users/enums/user-role.enum.js';
 
 export class RegisterDto {
   @Transform(({ value }) => String(value).trim().toLowerCase())
@@ -12,4 +21,10 @@ export class RegisterDto {
   @MinLength(8, { message: 'La contraseña debe tener como mínimo 8 caracteres' })
   @MaxLength(72, { message: 'La contraseña no puede exceder los 72 caracteres' })
   password: string;
+
+  @IsOptional()
+  @IsEnum(UserRole, {
+    message: 'El rol debe ser un valor válido (admin, teacher o student)',
+  })
+  role?: UserRole;
 }

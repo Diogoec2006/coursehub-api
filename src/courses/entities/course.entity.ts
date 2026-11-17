@@ -1,5 +1,14 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  type Relation,
+} from 'typeorm';
 import { Enrollment } from '../../enrollments/entities/enrollment.entity.js';
+import { User } from '../../users/entities/user.entity.js';
 
 @Entity('courses')
 export class Course {
@@ -11,6 +20,13 @@ export class Course {
 
   @Column()
   level: string;
+
+  @Column({ type: 'integer', nullable: true })
+  teacherId?: number | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'teacherId' })
+  teacher?: Relation<User>;
 
   @OneToMany(() => Enrollment, (enrollment) => enrollment.course)
   enrollments: Relation<Enrollment>[];

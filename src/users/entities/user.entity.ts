@@ -5,6 +5,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { UserRole } from '../enums/user-role.enum.js';
+
+export { UserRole };
 
 @Entity('users')
 export class User {
@@ -16,6 +19,9 @@ export class User {
 
   @Column({ select: false })
   passwordHash: string;
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.STUDENT })
+  role: UserRole;
 
   @CreateDateColumn()
   createdAt: Date;

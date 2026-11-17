@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { User } from '../src/users/entities/user.entity.js';
 import { UsersService } from '../src/users/users.service.js';
+import { UserRole } from '../src/users/enums/user-role.enum.js';
 
 describe('AuthModule (e2e)', () => {
   let app: INestApplication;
@@ -262,6 +263,12 @@ describe('AuthModule (e2e)', () => {
     let validAccessToken: string;
 
     beforeAll(async () => {
+      // Asignamos rol TEACHER al usuario de práctica para superar la política de RolesGuard
+      await usersRepository.update(
+        { email: 'practica@coursehub.edu' },
+        { role: UserRole.TEACHER },
+      );
+
       const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({

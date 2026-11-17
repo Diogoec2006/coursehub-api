@@ -652,6 +652,175 @@ CourseHub implementa un esquema de autenticación desacoplada donde el inicio de
 > * Los tokens de acceso emitidos son credenciales vivas: nunca los comparta en capturas de pantalla, foros, repositorios ni chats.
 > * `JWT_SECRET` se gestiona exclusivamente por entorno mediante `.env` (mínimo 32 caracteres) y nunca se incluye en el código fuente.
 
+---
+
+## 🛡️ Roles, Permisos y Propiedad de Recursos (Semana 10 - Sesión 19)
+
+> **"Un token válido identifica; no concede permisos."**  
+> Cada acción se autoriza de forma explícita. Autorización = Identidad + Política + Contexto.
+
+### 1. 401 Unauthorized vs 403 Forbidden
+Ambos códigos responden a preguntas de seguridad diferentes:
+```text
+¿La identidad es válida? (Token presente, firma íntegra, no expirado)
+  No ──→ 401 Unauthorized
+  Sí
+  ↓
+¿Tiene permiso? (Rol requerido por la política + propiedad del recurso)
+  No ──→ 403 Forbidden
+  Sí ──→ Continúa ejecución
+```
+
+### 2. Modelo de Roles Cerrados (`UserRole`)
+Un enumerador estricto previene discrepancias tipográficas en privilegios:
+```typescript
+export enum UserRole {
+  ADMIN = 'admin',
+  TEACHER = 'teacher',
+  STUDENT = 'student',
+}
+```
+En la entidad `User` (`src/users/entities/user.entity.ts`), el rol se modela con tipo `enum` y valor por defecto:
+```typescript
+@Column({ type: 'enum', enum: UserRole, default: UserRole.STUDENT })
+role: UserRole;
+```
+El payload del token JWT (`JwtPayload`) viaja con la identidad y el rol explícito: `{ sub: number, email: string, role: UserRole }`.
+
+### 3. Declaración de Políticas con `@Roles()`
+El decorador de metadatos expresa de manera declarativa qué roles tienen acceso a una ruta:
+```typescript
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
+```
+
+### 4. Guard de Políticas (`RolesGuard`)
+`RolesGuard` lee la política después de que `AuthGuard` valida el token JWT:
+```typescript
+const roles = this.reflector.getAllAndOverride<UserRole[]>(
+  ROLES_KEY, [context.getHandler(), context.getClass()],
+);
+if (!roles) return true;
+
+const { user } = context.switchToHttp().getRequest();
+return Boolean(user?.role && roles.includes(user.role));
+```
+
+### 5. Propiedad de Recursos en el Contexto de Negocio
+Un rol por sí solo es insuficiente cuando el permiso depende de **quién creó el recurso**:
+* **Admin**: Puede modificar cualquier curso sin restricción de autoría.
+* **Docente**: Puede modificar **únicamente** los cursos creados por su cuenta (`course.teacherId === user.sub`).
+* **Estudiante**: No tiene privilegios para modificar cursos.
+* **Ubicación**: La comprobación de propiedad reside dentro de la regla de negocio en el servicio (`CoursesService.update`).
+
+### 6. Matriz de Autorización de Endpoints en Cursos
+
+| Método | Endpoint | Políticas / Guards | Casos Probados |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/courses` (Ruta de Docente) | `AuthGuard`, `RolesGuard` (`@Roles(TEACHER, ADMIN)`) | `401` sin token<br>`403` si rol es `STUDENT`<br>`201` permitido con `TEACHER` o `ADMIN` |
+| `PATCH` | `/courses/:id` (Modificación y Propiedad) | `AuthGuard`, `RolesGuard` (`@Roles(ADMIN, TEACHER)`) + Regla de negocio | `401` sin token<br>`403` a `STUDENT` (RolesGuard)<br>`403` a `TEACHER` en curso ajeno<br>`200` a `TEACHER` en curso propio<br>`200` a `ADMIN` en cualquier curso |
+| `DELETE` | `/courses/:id` (Ruta Administrativa) | `AuthGuard`, `RolesGuard` (`@Roles(ADMIN)`) | `401` sin token<br>`403` a `STUDENT` o `TEACHER`<br>`200` permitido solo a `ADMIN` |
+| `GET` | `/courses`, `/courses/:id` | Público / Sin restricciones | `200` colección paginada o recurso |
+
+---
+
+## 🔒 Seguridad en Capas: CORS, Rate Limiting y HTTPS (Semana 10 - Sesión 20)
+
+La seguridad de **CourseHub API** se construye mediante una estrategia de **defensa en profundidad**, donde cada capa mitiga un riesgo específico sin delegar toda la protección a un único punto de fallo:
+
+```text
+Petición Entrante
+       │
+       ▼
+[ Red / Tránsito ]  ───→ HTTPS / TLS (Mitiga intercepción de tokens Bearer)
+       │
+       ▼
+[ Origen Web ]      ───→ CORS Explícito (Mitiga peticiones de sitios web no autorizados)
+       │
+       ▼
+[ Abuso / Tráfico ] ───→ Rate Limiting / Throttler (Mitiga ataques de fuerza bruta)
+       │
+       ▼
+[ Formato Entrada ] ───→ DTOs + ValidationPipe (Mitiga inyecciones y cuerpos malformados)
+       │
+       ▼
+[ Identidad ]       ───→ JWT + AuthGuard (Valida firma y autenticidad del usuario)
+       │
+       ▼
+[ Autorización ]    ───→ @Roles + RolesGuard (Comprueba política de privilegios)
+       │
+       ▼
+[ Contexto Negocio] ───→ Comprobación de Propiedad (Valida autoría del recurso)
+```
+
+### 1. Matriz de Riesgo y Control Principal
+
+| Riesgo de Seguridad | Control Principal | Implementación en CourseHub API |
+| :--- | :--- | :--- |
+| **Cuerpo malformado o campos intrusos** | DTO y `ValidationPipe` | `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true` |
+| **Ataque de fuerza bruta en credenciales** | Límite de solicitudes (Rate Limiting) | `@Throttle({ default: { limit: 5, ttl: 60_000 } })` en `POST /auth/login` |
+| **Acción no permitida o escalación** | Roles y Propiedad de Recursos | `@Roles()`, `RolesGuard` y verificación contextual en el servicio |
+| **Lectura no autorizada desde navegadores** | CORS Explícito | `app.enableCors({ origin: ['https://coursehub.example.edu'], ... })` |
+| **Intercepción de Bearer tokens en tránsito** | HTTPS / TLS y caducidad corta | TLS obligatorio en producción + `JWT_EXPIRES_IN=15m` |
+
+---
+
+### 2. Control de Acceso de Origen Cruzado (CORS)
+
+Los navegadores restringen la lectura de respuestas entre diferentes dominios a menos que el servidor declare explícitamente sus orígenes permitidos. En [main.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/main.ts):
+
+```typescript
+app.enableCors({
+  origin: ['https://coursehub.example.edu'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+});
+```
+
+* **`origin`**: Limita el acceso únicamente al cliente web legítimo de la institución, rechazando orígenes maliciosos de terceros.
+* **`methods`**: Declara estrictamente las operaciones HTTP expuestas por la API.
+* **`allowedHeaders`**: Autoriza `Content-Type` para cargas JSON y `Authorization` para el envío del token Bearer.
+
+---
+
+### 3. Límite de Solicitudes (Rate Limiting / Throttling)
+
+El rate limiting encarece computacional y temporalmente cualquier intento reiterado de vulnerar el servicio:
+
+1. **Configuración Global** en [app.module.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/app.module.ts):
+   ```typescript
+   ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]),
+   // Proveedor global
+   { provide: APP_GUARD, useClass: ThrottlerGuard }
+   ```
+   Aplica una cuota basal de hasta **20 solicitudes por minuto** por cliente en toda la API.
+
+2. **Protección Reforzada en Inicio de Sesión** en [auth.controller.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/auth/auth.controller.ts):
+   ```typescript
+   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+   @Post('login')
+   async login(@Body() loginDto: LoginDto) { ... }
+   ```
+   Reduce la tasa a **5 intentos por minuto**, mitigando ataques de diccionario y fuerza bruta contra contraseñas.
+
+> [!IMPORTANT]
+> **No divulgación de pistas en Rate Limiting (429 Too Many Requests):**  
+> Cuando el cliente agota su cuota, el servidor responde con `429 Too Many Requests`. Esta respuesta es completamente ciega respecto a las credenciales: no revela si el correo existe o si la contraseña era correcta, obligando al cliente a esperar el lapso configurado.
+
+---
+
+### 4. Directrices de HTTPS y Cifrado en Tránsito en Producción
+
+* **Entorno Local**: `http://localhost:3000` es aceptable para pruebas y desarrollo en un entorno aislado.
+* **Entorno de Producción**: **HTTPS/TLS es innegociable**. Dado que los Bearer tokens viajan en el encabezado `Authorization`, cualquier canal HTTP no cifrado permite la intercepción mediante ataques *Man-in-the-Middle* (MitM), comprometiendo la sesión del usuario.
+* **Terminación TLS**:
+  * En arquitecturas modernas de nube, el certificado y la terminación TLS no se gestionan directamente dentro de Node.js, sino en capas perimetrales: **Reverse Proxies (NGINX/Traefik)**, **Application Load Balancers (AWS ALB / Cloudflare)** o plataformas administradas (**Render, Railway, Fly.io**).
+  * Estas plataformas descifran el tráfico seguro en el borde y reenvían la petición internamente hacia la aplicación NestJS, propagando encabezados estándar como `X-Forwarded-Proto: https`.
+* **Protección de Secretos**:
+  * Los certificados SSL/TLS, claves privadas y el `JWT_SECRET` residen fuera del repositorio (`.gitignore`) y se inyectan dinámicamente como variables de entorno seguras.
+
+
+
 
 
 

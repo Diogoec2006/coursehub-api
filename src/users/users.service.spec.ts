@@ -4,6 +4,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { UsersService } from './users.service.js';
 import { User } from './entities/user.entity.js';
+import { UserRole } from './enums/user-role.enum.js';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -63,6 +64,33 @@ describe('UsersService', () => {
       expect(result).not.toHaveProperty('passwordHash');
       expect(result.email).toBe('usuario@example.com');
       expect(result.id).toBe(1);
+    });
+
+    it('debe persistir el usuario con el rol proporcionado si se especifica', async () => {
+      mockUsersRepository.findOneBy.mockResolvedValue(null);
+      const fakeTeacher = {
+        id: 2,
+        email: 'docente@example.com',
+        role: UserRole.TEACHER,
+        passwordHash: '$2b$12$fakeHash',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockUsersRepository.create.mockReturnValue(fakeTeacher);
+      mockUsersRepository.save.mockResolvedValue(fakeTeacher);
+
+      const result = await service.create(
+        'docente@example.com',
+        '$2b$12$fakeHash',
+        UserRole.TEACHER,
+      );
+
+      expect(mockUsersRepository.create).toHaveBeenCalledWith({
+        email: 'docente@example.com',
+        passwordHash: '$2b$12$fakeHash',
+        role: UserRole.TEACHER,
+      });
+      expect(result.role).toBe(UserRole.TEACHER);
     });
 
     it('debe lanzar ConflictException (409) si el correo ya existe previamente', async () => {
