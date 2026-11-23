@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -29,8 +30,9 @@ export class CoursesController {
     return this.coursesService.findAll(query);
   }
 
+  // ParseIntPipe detiene datos inválidos antes de la regla de negocio (Sesión 21)
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseIntPipe) id: number) {
     return this.coursesService.findOne(Number(id));
   }
 
@@ -48,7 +50,7 @@ export class CoursesController {
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() updateCourseDto: UpdateCourseDto,
     @Req() req: Request,
   ) {
@@ -60,7 +62,7 @@ export class CoursesController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseIntPipe) id: number) {
     return this.coursesService.remove(Number(id));
   }
 }

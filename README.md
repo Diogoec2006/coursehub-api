@@ -819,6 +819,126 @@ El rate limiting encarece computacional y temporalmente cualquier intento reiter
 * **Protección de Secretos**:
   * Los certificados SSL/TLS, claves privadas y el `JWT_SECRET` residen fuera del repositorio (`.gitignore`) y se inyectan dinámicamente como variables de entorno seguras.
 
+---
+
+## 🔄 Sesión 21 · Preocupaciones Transversales: Middleware, Guards, Pipes, Interceptors y Filters
+
+Las preocupaciones transversales (*cross-cutting concerns*) no pertenecen al código de negocio de cada controlador. NestJS proporciona un ciclo de vida con componentes especializados donde cada uno interviene en un momento exacto del procesamiento HTTP:
+
+```
+Solicitud ──► Middleware ──► Guard ──► Pipe ──► Controlador ──► Interceptor ──► Respuesta
+                                                     │
+                                                     ▼ (anteecepción)
+                                                   Filter
+```
+
+### 1. Matriz de Responsabilidades y Asignación por Situación
+
+| Situación en la API | Componente Adecuado | Momento de Intervención | Responsabilidad |
+| :--- | :--- | :--- | :--- |
+| **Registro de petición** | **Middleware** (`LoggingMiddleware`) | Antes de que la petición ingrese al pipeline de Nest | Trabajo HTTP general; registra método, ruta, código de estado y duración al dispararse `res.on('finish')`. |
+| **Token inválido o sin rol** | **Guard** (`AuthGuard`, `RolesGuard`) | Antes de pipes y controladores | Permitir o denegar la continuación evaluando autenticación JWT y roles requeridos. |
+| **`id` no numérico** | **Pipe** (`ParseIntPipe`) | Justo antes de ingresar al método del controlador | Transformar y validar parámetros de entrada, deteniendo datos inválidos antes de la regla de negocio. |
+| **Operación lenta / auditoría temporal** | **Interceptor** (`TimingInterceptor`) | Envuelve la llamada antes y después de su ejecución | Medir tiempos de respuesta con `rxjs tap()`, transformar o envolver resultados. |
+| **Recurso inexistente / error interno** | **Filter** (`HttpExceptionFilter`) | Al lanzarse cualquier excepción en el pipeline | Traducir excepciones a respuestas HTTP coherentes (`{ statusCode, path, timestamp, message }`) y ocultar detalles en errores 500. |
+
+---
+
+### 2. Implementación de los Componentes
+
+#### A. Middleware: Registro Limpio sin Secretos (`LoggingMiddleware`)
+Ubicación: [src/common/middleware/logging.middleware.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/common/middleware/logging.middleware.ts)
+
+```typescript
+@Injectable()
+export class LoggingMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction): void {
+    const startedAt = Date.now();
+
+    res.on('finish', () => {
+      console.log({
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+
+    next();
+  }
+}
+```
+
+#### B. Pipe: Validación de Parámetros (`ParseIntPipe`)
+Ubicación: [src/courses/courses.controller.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/courses.controller.ts)
+
+Detiene inmediatamente valores como `/courses/abc` con un `400 Bad Request` antes de que la consulta toque la base de datos o el servicio:
+
+```typescript
+@Get(':id')
+findOne(@Param('id', ParseIntPipe) id: number) {
+  return this.coursesService.findOne(id);
+}
+```
+
+#### C. Interceptor: Medición de Tiempos de Ejecución (`TimingInterceptor`)
+Ubicación: [src/common/interceptors/timing.interceptor.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/common/interceptors/timing.interceptor.ts)
+
+Envuelve la ejecución del controlador con el operador reactivo `tap` de RxJS:
+
+```typescript
+@Injectable()
+export class TimingInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const started = Date.now();
+    return next.handle().pipe(
+      tap(() => {
+        console.log({ durationMs: Date.now() - started });
+      }),
+    );
+  }
+}
+```
+
+#### D. Filter: Formato Uniforme de Excepciones y Ocultamiento de Secretos (`HttpExceptionFilter`)
+Ubicación: [src/common/filters/http-exception.filter.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/common/filters/http-exception.filter.ts)
+
+Garantiza respuestas homogéneas en toda la API y previene la fuga de información sensible sustituyendo errores no controlados por un mensaje neutro:
+
+```typescript
+@Catch()
+export class HttpExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    let message: any = 'Internal server error';
+
+    if (exception instanceof HttpException) {
+      const res = exception.getResponse();
+      message =
+        typeof res === 'object' && res !== null && 'message' in res
+          ? (res as any).message
+          : res;
+    }
+
+    response.status(status).json({
+      statusCode: status,
+      path: request.url,
+      timestamp: new Date().toISOString(),
+      message: status === 500 ? 'Internal server error' : message,
+    });
+  }
+}
+```
+
+
 
 
 

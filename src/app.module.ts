@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import Joi from 'joi';
@@ -15,6 +15,9 @@ import { StudentsModule } from './students/students.module.js';
 import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { LoggingMiddleware } from './common/middleware/logging.middleware.js';
+import { TimingInterceptor } from './common/interceptors/timing.interceptor.js';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 
 @Module({
   imports: [
@@ -74,6 +77,18 @@ import { AuthModule } from './auth/auth.module.js';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TimingInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggingMiddleware).forRoutes('*');
+  }
+}
