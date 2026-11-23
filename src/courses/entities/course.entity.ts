@@ -24,6 +24,14 @@ export class Course {
   @Column({ type: 'integer', nullable: true })
   teacherId?: number | null;
 
+  get createdByUserId(): number | null | undefined {
+    return this.teacherId;
+  }
+
+  set createdByUserId(val: number | null | undefined) {
+    this.teacherId = val;
+  }
+
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'teacherId' })
   teacher?: Relation<User>;

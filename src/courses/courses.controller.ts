@@ -20,10 +20,14 @@ import { AuthGuard } from '../auth/guards/auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { UserRole } from '../users/enums/user-role.enum.js';
+import { UpdateCourseUseCase } from './use-cases/update-course.use-case.js';
 
 @Controller('courses')
 export class CoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(
+    private readonly coursesService: CoursesService,
+    private readonly updateCourseUseCase?: UpdateCourseUseCase,
+  ) {}
 
   @Get()
   findAll(@Query() query: CoursesQueryDto) {
@@ -45,7 +49,7 @@ export class CoursesController {
     return this.coursesService.create(createCourseDto, user?.sub ?? user?.id);
   }
 
-  // Modificación de curso: protegida con JWT + RolesGuard + comprobación de propiedad en el servicio
+  // Modificación de curso: protegida con JWT + RolesGuard + Caso de Uso desacoplado (Sesión 22)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
   @Patch(':id')
@@ -55,6 +59,13 @@ export class CoursesController {
     @Req() req: Request,
   ) {
     const user = (req as any).user;
+    const actor = {
+      id: user?.id ?? user?.sub ?? 0,
+      role: user?.role ?? UserRole.STUDENT,
+    };
+    if (this.updateCourseUseCase) {
+      return this.updateCourseUseCase.execute(Number(id), updateCourseDto, actor);
+    }
     return this.coursesService.update(Number(id), updateCourseDto, user);
   }
 

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CoursesController } from './courses.controller.js';
 import { CoursesService } from './courses.service.js';
+import { UpdateCourseUseCase } from './use-cases/update-course.use-case.js';
 import { CoursesQueryDto } from './dto/courses-query.dto.js';
 import { AuthGuard } from '../auth/guards/auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -19,6 +20,10 @@ describe('CoursesController', () => {
     remove: vi.fn(),
   };
 
+  const mockUpdateCourseUseCase = {
+    execute: vi.fn(),
+  };
+
   beforeEach(async () => {
     vi.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
@@ -27,6 +32,10 @@ describe('CoursesController', () => {
         {
           provide: CoursesService,
           useValue: mockCoursesService,
+        },
+        {
+          provide: UpdateCourseUseCase,
+          useValue: mockUpdateCourseUseCase,
         },
       ],
     })
@@ -87,15 +96,18 @@ describe('CoursesController', () => {
     expect(result).toEqual(createdCourse);
   });
 
-  it('debe llamar a update pasando el id, DTO y req.user para verificación de propiedad', async () => {
+  it('debe llamar a update pasando el id, DTO y req.user delegando a updateCourseUseCase', async () => {
     const updateDto = { title: 'Nuevo Título' };
     const mockReq = { user: { sub: 5, role: UserRole.TEACHER } } as any;
     const updatedCourse = { id: 1, title: 'Nuevo Título', level: 'intermedio', teacherId: 5 };
 
-    mockCoursesService.update.mockResolvedValue(updatedCourse);
+    mockUpdateCourseUseCase.execute.mockResolvedValue(updatedCourse);
 
-    const result = await controller.update('1', updateDto, mockReq);
-    expect(service.update).toHaveBeenCalledWith(1, updateDto, mockReq.user);
+    const result = await controller.update('1' as any, updateDto, mockReq);
+    expect(mockUpdateCourseUseCase.execute).toHaveBeenCalledWith(1, updateDto, {
+      id: 5,
+      role: UserRole.TEACHER,
+    });
     expect(result).toEqual(updatedCourse);
   });
 

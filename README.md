@@ -938,6 +938,124 @@ export class HttpExceptionFilter implements ExceptionFilter {
 }
 ```
 
+---
+
+## 🏛️ Sesión 22 · Casos de Uso, Repositorios y Adaptadores (Clean & Hexagonal Architecture)
+
+Un servicio monolítico acumula decisiones y detalles técnicos dispares. Para proteger la regla de negocio y evitar que dependa de HTTP o de TypeORM, se aplica el patrón de **Puertos y Adaptadores (Arquitectura Hexagonal)**:
+
+* **Controladores**: Gestionan el protocolo HTTP (rutas, códigos de estado, parámetros).
+* **Casos de Uso**: Contienen la regla de negocio pura y políticas de propiedad.
+* **Puertos (Interfaces)**: Definen contratos estrictos con solo los métodos necesarios.
+* **Adaptadores e Infraestructura**: Implementan los puertos comunicándose con TypeORM y PostgreSQL.
+
+### 1. Dirección de Dependencia
+
+```
+HTTP Controller (CoursesController)
+      │
+      ▼
+UpdateCourseUseCase (Regla de Negocio)
+      │
+      ▼
+CourseRepository (Puerto / Contrato Desacoplado)
+      │
+      ▼
+TypeOrmCourseRepository (Adaptador de Infraestructura)
+      │
+      ▼
+PostgreSQL Database
+```
+
+---
+
+### 2. El Contrato (Puerto): `CourseRepository`
+Ubicación: [src/courses/ports/course.repository.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/ports/course.repository.ts)
+
+El contrato contiene **únicamente lo que el caso de uso necesita**, evitando exponer métodos innecesarios del ORM:
+
+```typescript
+export const COURSE_REPOSITORY = Symbol('COURSE_REPOSITORY');
+
+export interface CourseRepository {
+  findById(id: number): Promise<Course | null>;
+  save(course: Course): Promise<Course>;
+}
+```
+
+---
+
+### 3. El Caso de Uso: `UpdateCourseUseCase`
+Ubicación: [src/courses/use-cases/update-course.use-case.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/use-cases/update-course.use-case.ts)
+
+La política de propiedad queda en una unidad con nombre propio, sin depender de librerías de persistencia ni del protocolo HTTP:
+
+```typescript
+@Injectable()
+export class UpdateCourseUseCase {
+  constructor(
+    @Inject(COURSE_REPOSITORY)
+    private readonly courses: CourseRepository,
+  ) {}
+
+  async execute(
+    id: number,
+    changes: UpdateCourseDto,
+    actor: UpdateCourseActor,
+  ): Promise<Course> {
+    const course = await this.courses.findById(id);
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    const ownerId = course.createdByUserId ?? course.teacherId;
+    if (actor.role !== UserRole.ADMIN && ownerId !== actor.id) {
+      throw new ForbiddenException('You cannot modify this course');
+    }
+
+    Object.assign(course, changes);
+    return this.courses.save(course);
+  }
+}
+```
+
+---
+
+### 4. El Adaptador: `TypeOrmCourseRepository`
+Ubicación: [src/courses/adapters/typeorm-course.repository.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/adapters/typeorm-course.repository.ts)
+
+TypeORM implementa el contrato, pero no define la regla de negocio:
+
+```typescript
+@Injectable()
+export class TypeOrmCourseRepository implements CourseRepository {
+  constructor(
+    @InjectRepository(Course)
+    private readonly repository: Repository<Course>,
+  ) {}
+
+  findById(id: number): Promise<Course | null> {
+    return this.repository.findOneBy({ id });
+  }
+
+  save(course: Course): Promise<Course> {
+    return this.repository.save(course);
+  }
+}
+```
+
+---
+
+### 5. Preguntas que Revelan Acoplamiento
+
+| Pregunta de Arquitectura | Análisis en CourseHub API |
+| :--- | :--- |
+| **¿Esta clase cambia por una razón clara?** | **Sí.** `UpdateCourseUseCase` cambia solo si varía la regla de negocio o política de propiedad; `TypeOrmCourseRepository` cambia solo si cambia el ORM o la base de datos; `CoursesController` cambia solo ante modificaciones de la API HTTP. |
+| **¿El contrato pide solo métodos usados?** | **Sí.** El puerto `CourseRepository` define estrictamente `findById` y `save`, sin arrastrar la sobrecarga de los más de 20 métodos que expone un `Repository` de TypeORM. |
+| **¿Una implementación puede sustituir a otra?** | **Sí.** Podemos sustituir `TypeOrmCourseRepository` por un repositorio en memoria (`InMemoryCourseRepository`), MongoDB o Prisma sin alterar una sola línea de `UpdateCourseUseCase`. |
+| **¿La regla depende de un contrato y no de TypeORM?** | **Sí.** `UpdateCourseUseCase` inyecta el token simbólico `COURSE_REPOSITORY` y no importa ni depende de TypeORM, QueryBuilder ni SQL. |
+
+
 
 
 
