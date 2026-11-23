@@ -1,87 +1,108 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
 import { UpdateCourseUseCase } from './update-course.use-case.js';
-import { CourseRepository } from '../ports/course.repository.js';
+import { COURSE_REPOSITORY, type CourseRepository } from '../ports/course.repository.js';
 import { Course } from '../entities/course.entity.js';
 import { UserRole } from '../../users/enums/user-role.enum.js';
+import { UpdateCourseDto } from '../dto/update-couerse.dto.js';
 
-describe('UpdateCourseUseCase (Sesión 22: Clean Architecture & Use Case)', () => {
+describe('Sesión 23 · Reglas de negocio con Jest / Vitest (UpdateCourseUseCase)', () => {
   let useCase: UpdateCourseUseCase;
-  let mockRepository: CourseRepository;
+  let mockCourses: CourseRepository;
 
-  const mockCourse: Course = {
-    id: 1,
-    title: 'Arquitectura Limpia',
-    level: 'avanzado',
+  const sampleCourse: Course = {
+    id: 7,
+    title: 'NestJS básico',
+    level: 'intermedio',
     teacherId: 10,
     createdByUserId: 10,
     enrollments: [],
   } as Course;
 
-  beforeEach(() => {
-    mockRepository = {
+  beforeEach(async () => {
+    mockCourses = {
       findById: vi.fn(),
       save: vi.fn(),
     };
-    useCase = new UpdateCourseUseCase(mockRepository);
+
+    // Inyección de dependencias con puerto desacoplado
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UpdateCourseUseCase,
+        {
+          provide: COURSE_REPOSITORY,
+          useValue: mockCourses,
+        },
+      ],
+    }).compile();
+
+    useCase = module.get<UpdateCourseUseCase>(UpdateCourseUseCase);
   });
 
-  it('debe actualizar el curso si el actor es el docente propietario', async () => {
-    vi.mocked(mockRepository.findById).mockResolvedValue({ ...mockCourse });
-    vi.mocked(mockRepository.save).mockImplementation((c) => Promise.resolve(c));
-
+  it('allows the owner teacher to update a course (Arrange, Act, Assert)', async () => {
+    // Arrange: preparar entradas y mockear el repositorio
+    const changes: UpdateCourseDto = { title: 'NestJS avanzado' };
     const actor = { id: 10, role: UserRole.TEACHER };
-    const changes = { title: 'Arquitectura Limpia y Hexagonal' };
+    vi.mocked(mockCourses.findById).mockResolvedValue({ ...sampleCourse });
+    vi.mocked(mockCourses.save).mockImplementation(async (value) => value);
 
-    const result = await useCase.execute(1, changes, actor);
+    // Act: ejecutar la regla de negocio pura
+    const result = await useCase.execute(7, changes, actor);
 
-    expect(mockRepository.findById).toHaveBeenCalledWith(1);
-    expect(result.title).toBe('Arquitectura Limpia y Hexagonal');
-    expect(mockRepository.save).toHaveBeenCalled();
-  });
-
-  it('debe actualizar el curso si el actor es ADMIN aunque no sea el propietario', async () => {
-    vi.mocked(mockRepository.findById).mockResolvedValue({ ...mockCourse });
-    vi.mocked(mockRepository.save).mockImplementation((c) => Promise.resolve(c));
-
-    const adminActor = { id: 99, role: UserRole.ADMIN };
-    const changes = { title: 'Título Auditado por Admin' };
-
-    const result = await useCase.execute(1, changes, adminActor);
-
-    expect(result.title).toBe('Título Auditado por Admin');
-    expect(mockRepository.save).toHaveBeenCalled();
-  });
-
-  it('debe lanzar NotFoundException si el curso no existe en el repositorio', async () => {
-    vi.mocked(mockRepository.findById).mockResolvedValue(null);
-
-    const actor = { id: 10, role: UserRole.TEACHER };
-    await expect(useCase.execute(999, { title: 'X' }, actor)).rejects.toThrow(
-      NotFoundException,
+    // Assert: comprobar el resultado y la persistencia
+    expect(result.title).toBe('NestJS avanzado');
+    expect(mockCourses.findById).toHaveBeenCalledWith(7);
+    expect(mockCourses.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, title: 'NestJS avanzado' }),
     );
-    expect(mockRepository.save).not.toHaveBeenCalled();
   });
 
-  it('debe lanzar ForbiddenException si un docente intenta modificar el curso de otro docente', async () => {
-    vi.mocked(mockRepository.findById).mockResolvedValue({ ...mockCourse }); // teacherId: 10
+  it('rejects with NotFoundException and does not call save when course does not exist', async () => {
+    // Arrange: curso inexistente en el repositorio
+    vi.mocked(mockCourses.findById).mockResolvedValue(null);
+    const changes: UpdateCourseDto = { title: 'X' };
+    const actor = { id: 10, role: UserRole.TEACHER };
 
-    const anotherTeacher = { id: 25, role: UserRole.TEACHER }; // ID diferente
-    await expect(
-      useCase.execute(1, { title: 'Intento ilegítimo' }, anotherTeacher),
-    ).rejects.toThrow(ForbiddenException);
-
-    expect(mockRepository.save).not.toHaveBeenCalled();
+    // Act & Assert: lanza 404 y jamás llama a save
+    await expect(useCase.execute(999, changes, actor)).rejects.toThrow(NotFoundException);
+    expect(mockCourses.save).not.toHaveBeenCalled();
   });
 
-  it('debe lanzar ForbiddenException si un estudiante intenta modificar un curso', async () => {
-    vi.mocked(mockRepository.findById).mockResolvedValue({ ...mockCourse });
+  it('rejects with ForbiddenException and prevents saving when another teacher attempts to update', async () => {
+    // Arrange: curso pertenece al docente 10, intenta docente 99
+    vi.mocked(mockCourses.findById).mockResolvedValue({ ...sampleCourse });
+    const changes: UpdateCourseDto = { title: 'Modificación Ilegítima' };
+    const otherTeacher = { id: 99, role: UserRole.TEACHER };
 
-    const student = { id: 99, role: UserRole.STUDENT };
-    await expect(
-      useCase.execute(1, { title: 'Intento estudiante' }, student),
-    ).rejects.toThrow(ForbiddenException);
+    // Act & Assert: regla de seguridad impide continuar y no guarda
+    await expect(useCase.execute(7, changes, otherTeacher)).rejects.toThrow(ForbiddenException);
+    expect(mockCourses.save).not.toHaveBeenCalled();
+  });
 
-    expect(mockRepository.save).not.toHaveBeenCalled();
+  it('allows an administrator to update any course according to policy', async () => {
+    // Arrange: administrador con ID distinto al docente
+    vi.mocked(mockCourses.findById).mockResolvedValue({ ...sampleCourse });
+    vi.mocked(mockCourses.save).mockImplementation(async (value) => value);
+    const adminActor = { id: 1, role: UserRole.ADMIN };
+    const changes: UpdateCourseDto = { title: 'Título Auditado por Admin' };
+
+    // Act
+    const result = await useCase.execute(7, changes, adminActor);
+
+    // Assert: admin autorizado para actualizar
+    expect(result.title).toBe('Título Auditado por Admin');
+    expect(mockCourses.save).toHaveBeenCalled();
+  });
+
+  it('rejects with ForbiddenException and does not save when a student attempts to update', async () => {
+    // Arrange
+    vi.mocked(mockCourses.findById).mockResolvedValue({ ...sampleCourse });
+    const studentActor = { id: 10, role: UserRole.STUDENT };
+    const changes: UpdateCourseDto = { title: 'Intento de Estudiante' };
+
+    // Act & Assert
+    await expect(useCase.execute(7, changes, studentActor)).rejects.toThrow(ForbiddenException);
+    expect(mockCourses.save).not.toHaveBeenCalled();
   });
 });

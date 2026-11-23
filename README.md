@@ -1055,6 +1055,119 @@ export class TypeOrmCourseRepository implements CourseRepository {
 | **¿Una implementación puede sustituir a otra?** | **Sí.** Podemos sustituir `TypeOrmCourseRepository` por un repositorio en memoria (`InMemoryCourseRepository`), MongoDB o Prisma sin alterar una sola línea de `UpdateCourseUseCase`. |
 | **¿La regla depende de un contrato y no de TypeORM?** | **Sí.** `UpdateCourseUseCase` inyecta el token simbólico `COURSE_REPOSITORY` y no importa ni depende de TypeORM, QueryBuilder ni SQL. |
 
+---
+
+## 🧪 Sesión 23 · Reglas de Negocio con Jest / Vitest (Pruebas de Casos de Uso)
+
+Una prueba unitaria protege una decisión pequeña y aísla la lógica central sin levantar HTTP ni conectar bases de datos reales:
+
+* **Estructura AAA (Arrange, Act, Assert)**:
+  * **Arrange**: Preparación de datos, entidades y dependencias controladas mediante mocks (`vi.fn()` / `jest.fn()`).
+  * **Act**: Ejecución directa del método `useCase.execute(...)`.
+  * **Assert**: Comprobación estricta del resultado devuelto y de los efectos colaterales (interacción con el repositorio).
+* **Simulación del Puerto**:
+  ```typescript
+  const courses = {
+    findById: vi.fn(),
+    save: vi.fn(),
+  };
+
+  { provide: COURSE_REPOSITORY, useValue: courses }
+  ```
+* **Nomenclatura que Explica la Política**:
+  ```typescript
+  it('allows the owner teacher to update a course', async () => {
+    courses.findById.mockResolvedValue(course);
+    courses.save.mockImplementation(async (value) => value);
+
+    const result = await useCase.execute(7, changes, actor);
+
+    expect(result.title).toBe('NestJS avanzado');
+    expect(courses.save).toHaveBeenCalledWith(course);
+  });
+  ```
+* **Regla de Seguridad que Impide la Persistencia**:
+  Si la política falla (e.g., docente no propietario), la ejecución debe abortarse y el repositorio jamás debe invocar `save`:
+  ```typescript
+  await expect(useCase.execute(7, changes, otherTeacher))
+    .rejects.toThrow(ForbiddenException);
+
+  expect(courses.save).not.toHaveBeenCalled();
+  ```
+
+### Matriz de Escenarios Probados en `UpdateCourseUseCase`
+1. **Docente propietario** $\rightarrow$ actualiza el recurso y persiste cambios en el repositorio.
+2. **Curso inexistente** $\rightarrow$ lanza `NotFoundException` (404) y omite la persistencia (`save`).
+3. **Docente distinto** $\rightarrow$ lanza `ForbiddenException` (403) y previene cualquier invocación a `save`.
+4. **Administrador** $\rightarrow$ actualiza cualquier curso según la política institucional.
+5. **Estudiante** $\rightarrow$ lanza `ForbiddenException` (403) sin permitir mutación de datos.
+
+### Ejecución de Pruebas Unitarias
+```bash
+# Ejecutar todas las pruebas unitarias
+npm test
+
+# Modo interactivo / observador
+npm run test:watch
+```
+
+---
+
+## 📊 Sesión 24 · Controladores, Cobertura y Calidad de Pruebas
+
+El controlador HTTP tiene una responsabilidad delimitada: **traducir el protocolo HTTP y delegar**.
+* Recibe parámetros ya transformados (e.g. `ParseIntPipe`).
+* Entrega el DTO y la identidad (`actor`) al caso de uso.
+* Devuelve el resultado sin duplicar las reglas de propiedad.
+
+### 1. Simulación del Caso de Uso en Pruebas de Controlador
+```typescript
+const updateCourse = { execute: vi.fn() };
+
+providers: [
+  { provide: UpdateCourseUseCase, useValue: updateCourse },
+]
+```
+
+### 2. Prueba de Delegación (Conservación de Argumentos)
+Verifica que el puente HTTP no altere los argumentos al traspasarlos a la lógica de negocio:
+```typescript
+await expect(controller.update(7, dto, actor))
+  .resolves.toEqual({ id: 7, ...dto });
+
+expect(updateCourse.execute)
+  .toHaveBeenCalledWith(7, dto, actor);
+```
+
+### 3. Prueba de Propagación de Errores (Sin Falsos 200)
+Garantiza que una excepción rechazada por el caso de uso se propague fielmente hacia los filtros de excepciones y no se disfrace como respuesta exitosa:
+```typescript
+updateCourse.execute.mockRejectedValue(
+  new ForbiddenException('You cannot modify this course'),
+);
+
+await expect(controller.update(7, dto, actor))
+  .rejects.toThrow(ForbiddenException);
+```
+
+### 4. Medición de Cobertura y Criterios de Calidad
+
+Para medir la cobertura del código ejecutando el motor de reporte:
+```bash
+npm run test:cov
+# o equivalentemente:
+npm test -- --coverage
+```
+
+#### Preguntas Clave sobre Calidad de Pruebas:
+| Pregunta de Calidad | Evidencia en CourseHub API |
+| :--- | :--- |
+| **¿Se ejerció la rama de rechazo?** | **Sí.** Se comprueban tanto los casos exitosos como las ramas de rechazo (`NotFoundException`, `ForbiddenException`), verificando que no haya efectos secundarios (`expect(save).not.toHaveBeenCalled()`). |
+| **¿La expectativa verifica el resultado?** | **Sí.** Las aserciones no se limitan a comprobar que no explote (`toBeDefined`), sino que validan el contenido mutado (`result.title`) y los argumentos exactos de delegación. |
+| **¿Es independiente del reloj, orden y base local?** | **Sí.** Las pruebas utilizan dependencias dobles en memoria sin depender de PostgreSQL ni del orden secuencial de ejecución. |
+| **¿Su nombre explica el contrato?** | **Sí.** Cada bloque `it('...')` describe explícitamente el actor, la acción y la política que se está garantizando. |
+
+
 
 
 

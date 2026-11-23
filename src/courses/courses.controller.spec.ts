@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CoursesController } from './courses.controller.js';
 import { CoursesService } from './courses.service.js';
 import { UpdateCourseUseCase } from './use-cases/update-course.use-case.js';
@@ -96,19 +97,57 @@ describe('CoursesController', () => {
     expect(result).toEqual(createdCourse);
   });
 
-  it('debe llamar a update pasando el id, DTO y req.user delegando a updateCourseUseCase', async () => {
-    const updateDto = { title: 'Nuevo Título' };
-    const mockReq = { user: { sub: 5, role: UserRole.TEACHER } } as any;
-    const updatedCourse = { id: 1, title: 'Nuevo Título', level: 'intermedio', teacherId: 5 };
+  describe('update (Sesión 24 · Controladores, Cobertura y Calidad de Pruebas)', () => {
+    it('comprueba que el puente HTTP conserva los argumentos y delega al caso de uso', async () => {
+      const dto = { title: 'NestJS avanzado' };
+      const actor = { id: 7, role: UserRole.TEACHER };
+      const mockReq = { user: { sub: 7, role: UserRole.TEACHER } } as any;
+      const expectedCourse = { id: 7, ...dto, teacherId: 7 } as any;
 
-    mockUpdateCourseUseCase.execute.mockResolvedValue(updatedCourse);
+      mockUpdateCourseUseCase.execute.mockResolvedValue(expectedCourse);
 
-    const result = await controller.update('1' as any, updateDto, mockReq);
-    expect(mockUpdateCourseUseCase.execute).toHaveBeenCalledWith(1, updateDto, {
-      id: 5,
-      role: UserRole.TEACHER,
+      await expect(controller.update(7, dto, mockReq)).resolves.toEqual(expectedCourse);
+      expect(mockUpdateCourseUseCase.execute).toHaveBeenCalledWith(7, dto, actor);
     });
-    expect(result).toEqual(updatedCourse);
+
+    it('un error del caso de uso (ForbiddenException) no se convierte en un falso 200 y se propaga', async () => {
+      const dto = { title: 'Intento Ilegítimo' };
+      const mockReq = { user: { sub: 99, role: UserRole.TEACHER } } as any;
+
+      mockUpdateCourseUseCase.execute.mockRejectedValue(
+        new ForbiddenException('You cannot modify this course'),
+      );
+
+      await expect(controller.update(7, dto, mockReq)).rejects.toThrow(ForbiddenException);
+      expect(mockUpdateCourseUseCase.execute).toHaveBeenCalledWith(7, dto, {
+        id: 99,
+        role: UserRole.TEACHER,
+      });
+    });
+
+    it('un error de recurso inexistente (NotFoundException) se propaga sin alteración', async () => {
+      const dto = { title: 'Curso Inexistente' };
+      const mockReq = { user: { sub: 7, role: UserRole.TEACHER } } as any;
+
+      mockUpdateCourseUseCase.execute.mockRejectedValue(
+        new NotFoundException('Course not found'),
+      );
+
+      await expect(controller.update(999, dto, mockReq)).rejects.toThrow(NotFoundException);
+    });
+
+    it('delega en coursesService.update si no se proporciona updateCourseUseCase (compatibilidad)', async () => {
+      const fallbackController = new CoursesController(service);
+      const updateDto = { title: 'Fallback' };
+      const mockReq = { user: { sub: 5, role: UserRole.TEACHER } } as any;
+      const fallbackCourse = { id: 1, title: 'Fallback' } as any;
+
+      mockCoursesService.update.mockResolvedValue(fallbackCourse);
+
+      const result = await fallbackController.update(1, updateDto, mockReq);
+      expect(service.update).toHaveBeenCalledWith(1, updateDto, mockReq.user);
+      expect(result).toEqual(fallbackCourse);
+    });
   });
 
   it('debe llamar a remove con el id numérico', async () => {
