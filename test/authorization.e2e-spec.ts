@@ -23,6 +23,7 @@ describe('Sesión 19 · Roles, Permisos y Propiedad de Recursos (Integration / H
 
   // Repositorio simulado en memoria para cursos
   const dbCourses = new Map<number, any>();
+  let nextId = 100;
 
   const mockCoursesService = {
     findAll: vi.fn(),
@@ -34,7 +35,7 @@ describe('Sesión 19 · Roles, Permisos y Propiedad de Recursos (Integration / H
       return course;
     }),
     create: vi.fn().mockImplementation((createCourseDto, teacherId) => {
-      const id = dbCourses.size + 1;
+      const id = nextId++;
       const newCourse = { id, ...createCourseDto, teacherId };
       dbCourses.set(id, newCourse);
       return newCourse;

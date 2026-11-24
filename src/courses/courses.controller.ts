@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Optional,
   Param,
   ParseIntPipe,
   Patch,
@@ -26,7 +27,7 @@ import { UpdateCourseUseCase } from './use-cases/update-course.use-case.js';
 export class CoursesController {
   constructor(
     private readonly coursesService: CoursesService,
-    private readonly updateCourseUseCase?: UpdateCourseUseCase,
+    @Optional() private readonly updateCourseUseCase?: UpdateCourseUseCase,
   ) {}
 
   @Get()

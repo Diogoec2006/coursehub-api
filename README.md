@@ -1167,6 +1167,102 @@ npm test -- --coverage
 | **¿Es independiente del reloj, orden y base local?** | **Sí.** Las pruebas utilizan dependencias dobles en memoria sin depender de PostgreSQL ni del orden secuencial de ejecución. |
 | **¿Su nombre explica el contrato?** | **Sí.** Cada bloque `it('...')` describe explícitamente el actor, la acción y la política que se está garantizando. |
 
+---
+
+## 🌐 Sesión 25 · Integración y End-to-End (E2E)
+
+Las pruebas e2e y de integración observan cómo colaboran las capas completas de la aplicación:
+
+### 1. Tipos de Pruebas y sus Preguntas Clave
+| Tipo de Prueba | Pregunta que Responde | Ámbito en CourseHub API |
+| :--- | :--- | :--- |
+| **Unitaria** | ¿La regla funciona de forma aislada? | `UpdateCourseUseCase`, DTOs, Pipes y Filters sin HTTP ni BD. |
+| **Integración** | ¿Dos o más componentes cooperan correctamente? | `CoursesController ↔ UpdateCourseUseCase ↔ CourseRepository`. |
+| **End-to-End (E2E)** | ¿El flujo HTTP completo funciona como lo usa una persona? | Peticiones HTTP simuladas con `supertest` atravesando Guards, Pipes, Controllers y Casos de Uso. |
+| **Manual** | ¿La experiencia global parece correcta? | Verificación interactiva desde Postman. |
+
+### 2. Aislamiento y Determinismo en E2E
+* **Sin arrastre de datos**: Cada escenario ejecuta una limpieza/reinicio en `beforeEach`, garantizando que el conjunto se repita con el mismo resultado dos o más veces seguidas.
+* **Identidades de práctica conocidas**: Se generan tokens firmados con roles claros (`student`, `teacher`, `admin`).
+* **Sin secretos expuestos**: Claves de prueba aisladas y sin datos personales en el código.
+
+### 3. Matriz del Flujo de Pruebas E2E (`test/courses.e2e-spec.ts`)
+* **Ruta pública** $\rightarrow$ `GET /courses` responde `200 OK` sin requerir encabezados.
+* **Ruta protegida sin token** $\rightarrow$ `POST /courses` responde `401 Unauthorized`.
+* **Rol insuficiente** $\rightarrow$ `POST /courses` con token de estudiante responde `403 Forbidden`.
+* **Identidad autorizada** $\rightarrow$ `POST /courses` con token de docente responde `201 Created`.
+* **Entrada inválida** $\rightarrow$ `POST /courses` con cuerpo malformado responde `400 Bad Request` vía `ValidationPipe`.
+* **Rechazo por regla de propiedad** $\rightarrow$ `PATCH /courses/1` por docente ajeno responde `403 Forbidden`.
+* **Modificación autorizada por propietario** $\rightarrow$ `PATCH /courses/1` por creador responde `200 OK`.
+
+```bash
+# Ejecutar pruebas E2E
+npm run test:e2e
+```
+
+---
+
+## 🚀 Sesión 26 · GitHub Actions y Controles de Cambio (CI/CD)
+
+La automatización en Integración Continua (CI) hace repetible y compartida la señal de calidad antes de fusionar cambios a la rama principal:
+
+### 1. Flujo Automatizado de Verificación
+Ubicación: [.github/workflows/ci.yml](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/.github/workflows/ci.yml)
+
+```
+Push / Pull Request
+        │
+        ▼
+Instalación limpia (`npm ci`)
+        │
+        ▼
+Análisis estático (`npm run lint`)
+        │
+        ▼
+Pruebas automatizadas (`npm test`)
+        │
+        ▼
+Compilación limpia (`npm run build`)
+        │
+        ▼
+Señal de Aprobación o Rechazo (Checkmark)
+```
+
+```yaml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+```
+
+### 2. Auditoría y Actualización Controlada de Dependencias
+Auditar significa analizar el impacto técnico en lugar de actualizar a ciegas:
+1. **Identificar**: Detectar el paquete y versión afectados mediante reportes de auditoría.
+2. **Compatibilidad**: Comprobar compatibilidad con las versiones de Node.js, NestJS y TypeScript.
+3. **Alternativa mínima segura**: Aplicar el cambio con el menor riesgo de ruptura.
+4. **Validación**: Ejecutar la suite completa (`npm test` y `npm run build`).
+5. **Registro**: Documentar la decisión y el motivo del cambio en el historial del repositorio.
+
+### 3. Prueba de Falsabilidad del Control (Ver Fallar el CI)
+Un control de calidad solo es confiable si se confirma su capacidad de detectar errores:
+* **Fase 1 (Inyección de falla)**: Se introduce deliberadamente una expectativa incorrecta en una prueba o una regla inválida.
+* **Fase 2 (Verificación de fallo)**: El runner de pruebas o el CI reporta exactamente el paso y la aserción que no se cumplió.
+* **Fase 3 (Restauración)**: Se revierte la falla y se confirma que el control vuelve a emitir la señal verde de aprobación.
+
+
 
 
 
