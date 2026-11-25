@@ -10,6 +10,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { StudentsService } from './students.service.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
 import { UpdateStudentDto } from './dto/update-student.dto.js';
@@ -17,7 +18,8 @@ import { UpdateStudentStatusDto } from './dto/update-student-status.dto.js';
 import { GetStudentsFilterDto } from './dto/get-students-filter.dto.js';
 import { ParseIdPipe } from './pipes/parse-id.pipe.js';
 
-@Controller('students')
+@ApiTags('Students')
+@Controller({ path: 'students', version: '1' })
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 

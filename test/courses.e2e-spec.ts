@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
@@ -12,7 +12,7 @@ import { RolesGuard } from '../src/auth/guards/roles.guard.js';
 import { UserRole } from '../src/users/enums/user-role.enum.js';
 import { Course } from '../src/courses/entities/course.entity.js';
 
-describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
+describe('Sesión 25 & 28 · Integración, E2E y Versionado por URI (/v1)', () => {
   let app: INestApplication;
   let jwtService: JwtService;
 
@@ -96,6 +96,13 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
+    // Sesión 28: Versionado por URI observable (/v1)
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -134,9 +141,9 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
     }
   });
 
-  it('1. Ruta pública → 200 OK (Supertest comprueba GET /courses sin autenticación)', async () => {
+  it('1. Ruta pública → 200 OK (Supertest comprueba GET /v1/courses sin autenticación)', async () => {
     const response = await request(app.getHttpServer())
-      .get('/courses')
+      .get('/v1/courses')
       .expect(200);
 
     expect(Array.isArray(response.body)).toBe(true);
@@ -145,14 +152,14 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
 
   it('2. Ruta protegida sin token → 401 Unauthorized', async () => {
     await request(app.getHttpServer())
-      .post('/courses')
+      .post('/v1/courses')
       .send({ title: 'Curso Sin Auth', level: 'beginner' })
       .expect(401);
   });
 
   it('3. Rol insuficiente → 403 Forbidden (Estudiante intentando crear curso)', async () => {
     await request(app.getHttpServer())
-      .post('/courses')
+      .post('/v1/courses')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ title: 'Curso de Estudiante', level: 'beginner' })
       .expect(403);
@@ -160,7 +167,7 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
 
   it('4. Identidad autorizada → 201 Created (Docente crea curso con éxito)', async () => {
     const response = await request(app.getHttpServer())
-      .post('/courses')
+      .post('/v1/courses')
       .set('Authorization', `Bearer ${teacher1Token}`)
       .send({ title: 'NestJS Microservicios E2E', level: 'avanzado' })
       .expect(201);
@@ -172,7 +179,7 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
 
   it('5. Entrada inválida → 400 Bad Request (ValidationPipe rechaza DTO malformado)', async () => {
     await request(app.getHttpServer())
-      .post('/courses')
+      .post('/v1/courses')
       .set('Authorization', `Bearer ${teacher1Token}`)
       .send({ title: '', level: 'invalido' })
       .expect(400);
@@ -180,7 +187,7 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
 
   it('6. Regla de propiedad → 403 Forbidden (Docente intenta modificar curso ajeno)', async () => {
     await request(app.getHttpServer())
-      .patch('/courses/1')
+      .patch('/v1/courses/1')
       .set('Authorization', `Bearer ${teacher2Token}`)
       .send({ title: 'Modificación no autorizada' })
       .expect(403);
@@ -188,7 +195,7 @@ describe('Sesión 25 · Integración y End-to-End (E2E)', () => {
 
   it('7. Modificación autorizada por propietario → 200 OK', async () => {
     const response = await request(app.getHttpServer())
-      .patch('/courses/1')
+      .patch('/v1/courses/1')
       .set('Authorization', `Bearer ${teacher1Token}`)
       .send({ title: 'Título Actualizado por Docente 1' })
       .expect(200);

@@ -1,0 +1,318 @@
+{
+  "info": {
+    "_postman_id": "c0ursehb-v1-contract-integration-2026",
+    "name": "CourseHub API - v1 (OpenAPI & Integración Segura)",
+    "description": "Colección oficial para verificación del contrato v1 de CourseHub API. Implementa flujo reproducible de autenticación, lectura pública, operaciones protegidas con JWT, validación de DTO y rechazo de autorización (Sesión 27 y 28).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "courseId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Iniciar Sesión (Obtener Token JWT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.test('Retorna token JWT', function () {",
+              "    pm.expect(jsonData).to.have.property('accessToken');",
+              "});",
+              "if (jsonData.accessToken) {",
+              "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"teacher1@coursehub.edu\",\n  \"password\": \"DocentePass123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "auth", "login"]
+        },
+        "description": "Autentica al docente y guarda dinámicamente el accessToken temporal en las variables de la colección."
+      }
+    },
+    {
+      "name": "2. Lectura Pública de Cursos (GET /v1/courses)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 200 OK en lectura pública', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses?page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Endpoint público sin autenticación requerida para explorar el catálogo de cursos."
+      }
+    },
+    {
+      "name": "3. Operación Protegida: Crear Curso (POST /v1/courses)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.id) {",
+              "    pm.collectionVariables.set('courseId', jsonData.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"NestJS Arquitectura Limpia y OpenAPI\",\n  \"level\": \"intermedio\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses"]
+        },
+        "description": "Operación protegida que requiere token Bearer de un docente. Almacena el courseId para las siguientes pruebas."
+      }
+    },
+    {
+      "name": "4. Operación Protegida: Actualizar Curso (PATCH /v1/courses/:id)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 200 OK al modificar curso propio', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"NestJS Arquitectura Limpia v1.1\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses/{{courseId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses", "{{courseId}}"]
+        },
+        "description": "Modifica un curso aplicando la política de propiedad en UpdateCourseUseCase."
+      }
+    },
+    {
+      "name": "5. Rechazo de Autorización: Modificar Curso Ajeno (403 Forbidden)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 403 Forbidden o 404 Not Found', function () {",
+              "    pm.expect([403, 404]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Intento de modificación sin ser propietario\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses/99999",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses", "99999"]
+        },
+        "description": "Comprueba que la regla de seguridad impide modificar cursos ajenos retornando 403 o 404."
+      }
+    },
+    {
+      "name": "6. Rechazo de Autenticación: Petición sin Token (401 Unauthorized)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 401 Unauthorized', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Curso Anónimo\",\n  \"level\": \"intermedio\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses"]
+        },
+        "description": "Verifica que las rutas protegidas niegan el acceso con 401 si no se envía encabezado Authorization Bearer."
+      }
+    },
+    {
+      "name": "7. Rechazo de Validación: DTO Inválido (400 Bad Request)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code es 400 Bad Request', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"\",\n  \"level\": \"nivel_inexistente\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/courses",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "courses"]
+        },
+        "description": "Verifica que el ValidationPipe rechaza campos vacíos o valores no permitidos según el contrato OpenAPI."
+      }
+    }
+  ]
+}

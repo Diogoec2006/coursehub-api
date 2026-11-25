@@ -1,7 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -14,6 +15,12 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
+  // Versionado por URI: /v1/... (Sesión 28)
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -21,10 +28,25 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  const config = app.get(ConfigService);
-  const port = config.getOrThrow<number>('PORT');
-  const nodeEnv = config.getOrThrow<string>('NODE_ENV');
+
+  // Documentación de contrato OpenAPI y Swagger (Sesión 27)
+  const config = new DocumentBuilder()
+    .setTitle('CourseHub API')
+    .setDescription('Contrato formal OpenAPI de CourseHub: cursos, autenticación, inscripciones y seguridad')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addTag('Auth', 'Autenticación y tokens JWT')
+    .addTag('Courses', 'Gestión y catálogo de cursos')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
+
+  const appConfig = app.get(ConfigService);
+  const port = appConfig.getOrThrow<number>('PORT');
+  const nodeEnv = appConfig.getOrThrow<string>('NODE_ENV');
   await app.listen(port);
   logger.log(`Application running in "${nodeEnv}" mode on port ${port}`);
+  logger.log(`Swagger documentation available at: http://localhost:${port}/docs`);
 }
 await bootstrap();

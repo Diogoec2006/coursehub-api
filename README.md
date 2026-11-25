@@ -1262,6 +1262,63 @@ Un control de calidad solo es confiable si se confirma su capacidad de detectar 
 * **Fase 2 (Verificación de fallo)**: El runner de pruebas o el CI reporta exactamente el paso y la aserción que no se cumplió.
 * **Fase 3 (Restauración)**: Se revierte la falla y se confirma que el control vuelve a emitir la señal verde de aprobación.
 
+---
+
+## 📜 Sesión 27 · OpenAPI, Swagger y Seguridad del Contrato
+
+OpenAPI describe el acuerdo formal entre la API y sus clientes sin obligar a leer el código de implementación:
+- **Rutas y Métodos**: Catálogo exhaustivo de endpoints con sus respectivos verbos HTTP.
+- **Entradas y DTOs**: Esquemas documentados con decoradores `@ApiProperty` y `@ApiPropertyOptional`, incluyendo tipos, validaciones, restricciones y ejemplos coherentes.
+- **Respuestas y Errores Específicos**:
+  - `200 OK` / `201 Created`: Resultado exitoso documentado con la estructura retornada.
+  - `400 Bad Request`: DTO inválido o identificadores malformados rechazados por `ValidationPipe` y `ParseIntPipe`.
+  - `401 Unauthorized`: Token Bearer JWT ausente, expirado o manipulado.
+  - `403 Forbidden`: Identidad autenticada pero con rol insuficiente o violación de la política de propiedad.
+  - `404 Not Found`: Recurso no encontrado.
+  - `429 Too Many Requests`: Protección Throttler ante saturación de peticiones.
+- **Seguridad y Confidencialidad**:
+  - Esquema Bearer JWT configurado en Swagger con `.addBearerAuth()` y `@ApiBearerAuth()`.
+  - El contrato no expone trazas internas de error, cadenas SQL ni secretos como `passwordHash`.
+- **Acceso a la Documentación Interactiva**:
+  - Swagger UI disponible en: `http://localhost:3000/docs`
+
+---
+
+## 🌐 Sesión 28 · Versionado e Integración con Cliente
+
+El versionado por URI (`/v1`) hace observable el contrato y garantiza estabilidad a los consumidores ante cambios futuros:
+
+### 1. Versionado por URI en NestJS
+- Se habilita el versionado en `src/main.ts` antes de instanciar la documentación OpenAPI:
+  ```typescript
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+  ```
+- Controladores versionados explícitamente:
+  ```typescript
+  @Controller({ path: 'courses', version: '1' })
+  export class CoursesController {}
+  ```
+- Rutas observables resultantes:
+  - `/v1/courses`
+  - `/v1/auth/login`
+  - `/v1/auth/register`
+  - `/v1/auth/me`
+
+### 2. Colección Postman de Integración Segura (`postman/CourseHub_v1.postman_collection.json`)
+La colección convierte el contrato en un flujo interactivo y repetible que no depende de carpetas locales:
+1. **URL Base y Variables**: Uso de `{{baseUrl}}` (ej. `http://localhost:3000`) y `{{accessToken}}` temporal.
+2. **Autenticación**: `POST {{baseUrl}}/v1/auth/login` extrae dinámicamente el token JWT al entorno.
+3. **Lectura Pública**: `GET {{baseUrl}}/v1/courses` comprueba acceso anónimo.
+4. **Operación Protegida (Crear)**: `POST {{baseUrl}}/v1/courses` con `Bearer {{accessToken}}` (201 Created).
+5. **Operación Protegida (Modificar)**: `PATCH {{baseUrl}}/v1/courses/:id` verifica propiedad docente (200 OK).
+6. **Autorización Rechazada**: `PATCH {{baseUrl}}/v1/courses/999` demuestra rechazo de modificación ilícita (403/404).
+7. **Sin Token**: `POST {{baseUrl}}/v1/courses` sin encabezado Authorization (401 Unauthorized).
+8. **Validación DTO**: `POST {{baseUrl}}/v1/courses` con datos inválidos (400 Bad Request).
+
+
 
 
 

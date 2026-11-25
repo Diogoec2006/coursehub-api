@@ -9,12 +9,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { EnrollmentsService } from './enrollments.service.js';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto.js';
 import { EnrollmentsQueryDto } from './dto/enrollments-query.dto.js';
 import { ParseIdPipe } from '../students/pipes/parse-id.pipe.js';
 
-@Controller()
+@ApiTags('Enrollments')
+@Controller({ version: '1' })
 export class EnrollmentsController {
   constructor(private readonly enrollmentsService: EnrollmentsService) {}
 
