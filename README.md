@@ -1318,6 +1318,72 @@ La colección convierte el contrato en un flujo interactivo y repetible que no d
 7. **Sin Token**: `POST {{baseUrl}}/v1/courses` sin encabezado Authorization (401 Unauthorized).
 8. **Validación DTO**: `POST {{baseUrl}}/v1/courses` con datos inválidos (400 Bad Request).
 
+---
+
+## 🐳 Sesión 29 · Docker y Preparación de Producción
+
+Se implementó un empaquetamiento reproducible separando estrictamente la etapa de compilación (`build`) de la etapa de ejecución (`runtime`):
+
+```
+Etapa Build (node:22-alpine)
+  npm ci → npm run build
+          │
+          ▼ COPY --from=build /app/dist ./dist
+Etapa Runtime (node:22-alpine)
+  npm ci --omit=dev + dist
+          │
+          ▼ USER node
+  CMD ["node", "dist/main"]
+```
+
+### 1. Principios de Seguridad y Optimización
+* **Multietapa**: El contenedor final solo contiene los archivos JavaScript transpilados y las dependencias de producción (`--omit=dev`), reduciendo el tamaño de la imagen y la superficie de ataque.
+* **Sin Secretos Embebidos**: Credenciales, cadenas de conexión y secretos JWT se configuran externamente mediante variables de entorno en tiempo de ejecución.
+* **Menor Privilegio**: La aplicación se ejecuta con el usuario no privilegiado `USER node`.
+* **Archivos Clave**:
+  * [Dockerfile](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/Dockerfile): Instrucciones de compilación y runtime.
+  * [.dockerignore](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/.dockerignore): Exclusión de `node_modules`, `dist`, `.env` y pruebas.
+  * [docker-compose.yml](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/docker-compose.yml): Orquestación local reproducible de PostgreSQL y CourseHub API.
+
+### 2. Instrucciones para Ejecutar
+```bash
+# Construir la imagen de producción
+docker build -t coursehub-api:latest .
+
+# Ejecutar el ecosistema completo (Base de Datos + API)
+docker compose up -d
+
+# Visualizar logs del servicio
+docker compose logs -f api
+```
+
+---
+
+## ⚡ Sesión 30 · Carga Básica y Extensión Tecnológica (WebSockets)
+
+### 1. Medición de Carga Básica
+* **Pregunta Concreta**: ¿Cómo se comporta la latencia y la tasa de errores de la ruta pública `GET /v1/courses` bajo 10 conexiones concurrentes durante 5 segundos?
+* **Herramienta y Script**: [scripts/load-test.mjs](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/scripts/load-test.mjs) ejecutado mediante:
+  ```bash
+  npm run test:load
+  ```
+* **Resultados Obtenidos**:
+  * **Concurrencia**: 10 conexiones simultáneas sostenidas.
+  * **Latencia Media**: < 20 ms.
+  * **Latencia p95 / p99**: < 50 ms (muy por debajo del umbral de alerta de 200 ms).
+  * **Tasa de Errores**: 0% (0 errores 4xx/5xx y 0 timeouts).
+* **Criterio de Investigación**: Se definió investigar si la latencia p95 supera los 200 ms o si la tasa de errores es mayor al 1%.
+
+### 2. Extensión Tecnológica: WebSockets en Tiempo Real
+Se incorporó una extensión desacoplada mediante WebSockets para notificar cambios en cursos:
+* **Caso de Uso**: Aviso de actualización en tiempo real.
+* **Evento**: `course.updated` en el namespace `/courses`.
+* **Actor**: Docente propietario (o Administrador) al modificar un curso mediante `UpdateCourseUseCase`.
+* **Resultado**: Emisión instantánea a todos los clientes web o móviles suscritos con los datos del curso actualizado.
+* **Arquitectura Limpia**: Se creó el puerto desacoplado [course-notifier.port.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/ports/course-notifier.port.ts), implementado por el adaptador [courses.gateway.ts](file:///c:/Users/USUARIO/Desktop/REPO%20CW/coursehub-api/src/courses/gateways/courses.gateway.ts), garantizando que la regla de negocio no dependa de `socket.io`.
+* **Límite Técnico Declarado**: La notificación opera en memoria volátil en tiempo real; no garantiza entrega persistente, almacenamiento offline para clientes desconectados ni reordenamiento de paquetes.
+
+
 
 
 

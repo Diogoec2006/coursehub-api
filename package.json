@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:load": "node scripts/load-test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -28,9 +29,11 @@
     "@nestjs/jwt": "^12.0.3",
     "@nestjs/mapped-types": "^12.0.0",
     "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/platform-socket.io": "^12.6.3",
     "@nestjs/swagger": "^12.1.2",
     "@nestjs/throttler": "^6.8.0",
     "@nestjs/typeorm": "^12.0.2",
+    "@nestjs/websockets": "^12.6.3",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -38,6 +41,7 @@
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.4",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^1.1.1"
   },
@@ -52,6 +56,7 @@
     "@types/supertest": "^7.0.0",
     "@types/swagger-ui-express": "^4.1.8",
     "@vitest/coverage-v8": "^4.1.2",
+    "autocannon": "^9.0.0",
     "oxlint": "^1.58.0",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",

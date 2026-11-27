@@ -105,4 +105,21 @@ describe('Sesión 23 · Reglas de negocio con Jest / Vitest (UpdateCourseUseCase
     await expect(useCase.execute(7, changes, studentActor)).rejects.toThrow(ForbiddenException);
     expect(mockCourses.save).not.toHaveBeenCalled();
   });
+
+  it('notifies subscribers via CourseNotifier port when course is updated successfully (Sesión 30)', async () => {
+    const mockNotifier = { notifyCourseUpdated: vi.fn() };
+    const customUseCase = new UpdateCourseUseCase(mockCourses, mockNotifier);
+    vi.mocked(mockCourses.findById).mockResolvedValue({ ...sampleCourse });
+    vi.mocked(mockCourses.save).mockImplementation(async (value) => value);
+
+    const changes: UpdateCourseDto = { title: 'Título con Notificación en Tiempo Real' };
+    const actor = { id: 10, role: UserRole.TEACHER };
+
+    const result = await customUseCase.execute(7, changes, actor);
+
+    expect(result.title).toBe('Título con Notificación en Tiempo Real');
+    expect(mockNotifier.notifyCourseUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, title: 'Título con Notificación en Tiempo Real' }),
+    );
+  });
 });
