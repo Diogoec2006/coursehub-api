@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { CoursesService } from './courses.service.js';
 import { CreateCourseDto } from './dto/create-course.dto.js';
@@ -30,6 +31,7 @@ import { UserRole } from '../users/enums/user-role.enum.js';
 import { UpdateCourseUseCase } from './use-cases/update-course.use-case.js';
 
 @ApiTags('Courses')
+@SkipThrottle()
 @Controller({ path: 'courses', version: '1' })
 export class CoursesController {
   constructor(
